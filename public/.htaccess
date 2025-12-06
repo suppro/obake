@@ -13,6 +13,11 @@
     RewriteCond %{HTTP:x-xsrf-token} .
     RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
 
+    # Пропускаем статические файлы (включая аудио) напрямую через Apache для поддержки Range-запросов
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteCond %{REQUEST_URI} \.(mp3|mp4|wav|ogg|webm|m4a|jpg|jpeg|png|gif|css|js|ico|svg|woff|woff2|ttf|eot)$ [NC]
+    RewriteRule ^ - [L]
+
     # Redirect Trailing Slashes If Not A Folder...
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_URI} (.+)/$
@@ -24,7 +29,16 @@
     RewriteRule ^ index.php [L]
 </IfModule>
 
-# <<< ЭТО ВСЁ, ЧТО НУЖНО ДОБАВИТЬ >>>
+# Поддержка Range-запросов для аудио и видео файлов
 <IfModule mod_headers.c>
+    # Устанавливаем заголовок Accept-Ranges для всех файлов
     Header set Accept-Ranges bytes
+    
+    # Включаем поддержку Range-запросов для медиа файлов
+    <FilesMatch "\.(mp3|mp4|wav|ogg|webm|m4a)$">
+        Header set Accept-Ranges bytes
+        Header set Cache-Control "public, max-age=3600"
+        # Включаем поддержку Range-запросов
+        Header unset Content-Length
+    </FilesMatch>
 </IfModule>

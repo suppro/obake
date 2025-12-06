@@ -6,6 +6,7 @@ use App\Http\Controllers\DictionaryController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\StoryController;
 use App\Http\Controllers\StudyController;
+use App\Http\Controllers\AudioController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminDictionaryController;
 use App\Http\Controllers\Admin\AdminStoryController;
@@ -23,6 +24,11 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth')->name('logout');
+
+// Обслуживание аудио файлов с поддержкой Range-запросов
+Route::get('/audio/{path}', [AudioController::class, 'serve'])
+    ->where('path', '.*')
+    ->name('audio.serve');
 
 // Защищенные маршруты (только для авторизованных)
 Route::middleware('auth')->group(function () {

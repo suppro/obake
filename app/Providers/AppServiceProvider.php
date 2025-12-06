@@ -19,6 +19,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Добавляем заголовок Accept-Ranges для всех ответов
+        if (!headers_sent()) {
+            header('Accept-Ranges: bytes');
+        }
     }
 }

@@ -162,7 +162,8 @@ document.addEventListener('DOMContentLoaded', function() {
             // Проверяем, есть ли сохраненное аудио
             if (audioPath) {
                 try {
-                    const audioUrl = '{{ url("/storage") }}/' + audioPath;
+                    // Используем специальный маршрут для аудио с поддержкой Range-запросов
+                    const audioUrl = '{{ url("/audio") }}/' + audioPath;
                     const audio = new Audio(audioUrl);
                     await audio.play();
                     return;

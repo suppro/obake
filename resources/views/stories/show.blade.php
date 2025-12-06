@@ -1216,7 +1216,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (audioPath) {
             // Используем сохраненное аудио
             try {
-                const audioUrl = '{{ url("/storage") }}/' + audioPath;
+                // Используем специальный маршрут для аудио с поддержкой Range-запросов
+                const audioUrl = '{{ url("/audio") }}/' + audioPath;
                 currentAudio = new Audio(audioUrl);
                 
                 // Предзагружаем аудио для возможности перемотки
@@ -1889,7 +1890,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Проверяем, есть ли сохраненное аудио
         if (word.audio_path) {
             try {
-                const audioUrl = '{{ url("/storage") }}/' + word.audio_path;
+                // Используем специальный маршрут для аудио с поддержкой Range-запросов
+                const audioUrl = '{{ url("/audio") }}/' + word.audio_path;
                 currentWordAudio = new Audio(audioUrl);
                 currentWordButton = buttonElement;
                 
