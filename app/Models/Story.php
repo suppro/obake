@@ -13,6 +13,7 @@ class Story extends Model
         'level',
         'description',
         'is_active',
+        'audio_path',
     ];
 
     protected $casts = [

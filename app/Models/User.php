@@ -69,6 +69,22 @@ class User extends Authenticatable
     }
 
     /**
+     * Прогресс изучения слов
+     */
+    public function wordStudyProgress()
+    {
+        return $this->hasMany(\App\Models\WordStudyProgress::class);
+    }
+
+    /**
+     * История повторений слов
+     */
+    public function wordRepetitions()
+    {
+        return $this->hasMany(\App\Models\WordRepetition::class);
+    }
+
+    /**
      * Проверка, является ли пользователь администратором
      */
     public function isAdmin(): bool

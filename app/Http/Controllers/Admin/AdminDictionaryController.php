@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\GlobalDictionary;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class AdminDictionaryController extends Controller
 {
@@ -41,9 +42,19 @@ class AdminDictionaryController extends Controller
             'word_type' => ['nullable', 'string', 'max:255'],
             'example_ru' => ['nullable', 'string'],
             'example_jp' => ['nullable', 'string'],
+            'audio_file' => ['nullable', 'file', 'mimes:mp3', 'max:5120'], // Максимум 5MB
         ]);
 
-        GlobalDictionary::create($validated);
+        $word = GlobalDictionary::create($validated);
+
+        // Обрабатываем загрузку аудио файла
+        if ($request->hasFile('audio_file')) {
+            $audioFile = $request->file('audio_file');
+            $audioPath = 'audio/words/' . $word->id . '.mp3';
+            Storage::disk('public')->putFileAs('audio/words', $audioFile, $word->id . '.mp3');
+            $word->audio_path = $audioPath;
+            $word->save();
+        }
 
         return redirect()->route('admin.dictionary.index')->with('success', 'Слово успешно добавлено');
     }

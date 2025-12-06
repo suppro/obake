@@ -17,6 +17,7 @@ class GlobalDictionary extends Model
         'word_type',
         'example_ru',
         'example_jp',
+        'audio_path',
     ];
 
     /**
@@ -35,5 +36,21 @@ class GlobalDictionary extends Model
     {
         return $this->belongsToMany(Story::class, 'story_words', 'word_id', 'story_id')
             ->withTimestamps();
+    }
+
+    /**
+     * Прогресс изучения этого слова пользователями
+     */
+    public function studyProgress()
+    {
+        return $this->hasMany(\App\Models\WordStudyProgress::class, 'word_id');
+    }
+
+    /**
+     * История повторений этого слова
+     */
+    public function repetitions()
+    {
+        return $this->hasMany(\App\Models\WordRepetition::class, 'word_id');
     }
 }

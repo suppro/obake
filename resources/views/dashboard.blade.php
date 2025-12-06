@@ -6,7 +6,7 @@
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <h1 class="text-4xl font-bold mb-8 text-purple-400">Добро пожаловать, {{ auth()->user()->name }}! 👻</h1>
     
-    <div class="grid md:grid-cols-2 gap-6 mb-8">
+    <div class="grid md:grid-cols-3 gap-6 mb-8">
         <a href="{{ route('stories.index') }}" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition shadow-lg">
             <h2 class="text-2xl font-bold mb-2 text-purple-400">📚 Рассказы</h2>
             <p class="text-gray-400">Читайте рассказы на японском языке разных уровней сложности</p>
@@ -16,29 +16,185 @@
             <h2 class="text-2xl font-bold mb-2 text-purple-400">📖 Мой словарь</h2>
             <p class="text-gray-400">Просматривайте и изучайте слова из вашего личного словаря</p>
         </a>
+        
+        <a href="{{ route('study.index') }}" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition shadow-lg">
+            <h2 class="text-2xl font-bold mb-2 text-purple-400">🎯 Изучение</h2>
+            <p class="text-gray-400">Повторяйте слова и отслеживайте свой прогресс</p>
+        </a>
     </div>
     
-    <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
-        <h2 class="text-2xl font-bold mb-4">Ваша статистика</h2>
-        <div class="grid grid-cols-3 gap-4">
-            <div class="text-center">
-                <div class="text-3xl font-bold text-purple-400">{{ auth()->user()->dictionary()->count() }}</div>
-                <div class="text-gray-400">Слов в словаре</div>
+    <div class="mb-8">
+        <div class="bg-gray-800 rounded-lg p-6 shadow-lg mb-6">
+            <h2 class="text-2xl font-bold mb-4">Ваша статистика</h2>
+            <div class="grid grid-cols-3 gap-4">
+                <div class="text-center">
+                    <div class="text-3xl font-bold text-purple-400">{{ auth()->user()->dictionary()->count() }}</div>
+                    <div class="text-gray-400">Слов в словаре</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-3xl font-bold text-purple-400">{{ auth()->user()->readStories()->count() }}</div>
+                    <div class="text-gray-400">Прочитано рассказов</div>
+                </div>
+                <div class="text-center">
+                    @php
+                        $readStories = auth()->user()->readStories()->get();
+                        $levels = $readStories->pluck('level')->unique()->sort();
+                        $currentLevel = $levels->isNotEmpty() ? $levels->last() : 'N5';
+                    @endphp
+                    <div class="text-3xl font-bold text-purple-400">{{ $currentLevel }}</div>
+                    <div class="text-gray-400">Текущий уровень</div>
+                </div>
             </div>
-            <div class="text-center">
-                <div class="text-3xl font-bold text-purple-400">{{ auth()->user()->readStories()->count() }}</div>
-                <div class="text-gray-400">Прочитано рассказов</div>
+        </div>
+        
+        <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-2xl font-bold">📅 Календарь активности</h2>
+                <div class="flex items-center gap-3">
+                    <a href="{{ route('dashboard', ['year' => $selectedYear - 1]) }}" 
+                       class="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded transition">
+                        ←
+                    </a>
+                    <span class="text-lg font-semibold text-purple-400 min-w-[80px] text-center">{{ $selectedYear }}</span>
+                    <a href="{{ route('dashboard', ['year' => $selectedYear + 1]) }}" 
+                       class="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded transition">
+                        →
+                    </a>
+                </div>
             </div>
-            <div class="text-center">
-                @php
-                    $readStories = auth()->user()->readStories()->get();
-                    $levels = $readStories->pluck('level')->unique()->sort();
-                    $currentLevel = $levels->isNotEmpty() ? $levels->last() : 'N5';
-                @endphp
-                <div class="text-3xl font-bold text-purple-400">{{ $currentLevel }}</div>
-                <div class="text-gray-400">Текущий уровень</div>
+            
+            <div class="overflow-x-auto mb-4">
+                <div id="calendar-grid" class="calendar-container" style="grid-template-columns: repeat({{ $weeksInYear }}, 1fr);">
+                    @php
+                        $currentDate = $startDate->copy();
+                        $maxCount = $repetitionDates->max('count') ?? 1;
+                        $endOfYear = $endDate->copy(); // 31 декабря выбранного года
+                    @endphp
+                    
+                    @for($i = 0; $i < $weeksInYear; $i++)
+                        <div class="calendar-week">
+                            @for($j = 0; $j < 7; $j++)
+                                @php
+                                    // Пропускаем дни до начала года
+                                    if ($i == 0 && $j < $firstDayWeekday) {
+                                        $dateKey = null;
+                                        $count = 0;
+                                        $intensity = 0;
+                                        $isToday = false;
+                                        $displayDate = null;
+                                    } else {
+                                        // Проверяем, не вышли ли за пределы года
+                                        // Показываем день, если он в пределах выбранного года (включая 31 декабря)
+                                        if ($currentDate->year == $selectedYear && $currentDate->lte($endOfYear)) {
+                                            // Показываем день года (включая последний день 31 декабря)
+                                            $dateKey = $currentDate->format('Y-m-d');
+                                            $repetition = $repetitionDates->get($dateKey);
+                                            $count = $repetition ? $repetition->count : 0;
+                                            $intensity = $maxCount > 0 ? min(4, floor(($count / $maxCount) * 4)) : 0;
+                                            $isToday = $currentDate->isSameDay($today);
+                                            $displayDate = $currentDate->copy();
+                                            
+                                            // Переходим к следующему дню
+                                            $currentDate->addDay();
+                                        } else {
+                                            // Если вышли за пределы года, показываем пустую ячейку
+                                            $dateKey = null;
+                                            $count = 0;
+                                            $intensity = 0;
+                                            $isToday = false;
+                                            $displayDate = null;
+                                        }
+                                    }
+                                @endphp
+                                @if($dateKey !== null)
+                                    <div 
+                                        class="calendar-day 
+                                            @if($intensity == 0) bg-gray-700 
+                                            @elseif($intensity == 1) bg-purple-600 
+                                            @elseif($intensity == 2) bg-purple-500 
+                                            @elseif($intensity == 3) bg-purple-400 
+                                            @else bg-purple-300 
+                                            @endif
+                                            @if($isToday) calendar-today @endif"
+                                        data-date="{{ $displayDate->format('Y-m-d') }}"
+                                        data-count="{{ $count }}"
+                                        title="{{ $displayDate->format('d.m.Y') }}: {{ $count }} повторений">
+                                    </div>
+                                @else
+                                    <div class="calendar-day bg-transparent"></div>
+                                @endif
+                            @endfor
+                        </div>
+                    @endfor
+                </div>
+            </div>
+            
+            <div class="flex items-center justify-between mt-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-gray-400 text-xs">Меньше</span>
+                    <div class="flex gap-1">
+                        <div class="w-3 h-3 bg-gray-700 rounded-sm"></div>
+                        <div class="w-3 h-3 bg-purple-600 rounded-sm"></div>
+                        <div class="w-3 h-3 bg-purple-500 rounded-sm"></div>
+                        <div class="w-3 h-3 bg-purple-400 rounded-sm"></div>
+                        <div class="w-3 h-3 bg-purple-300 rounded-sm"></div>
+                    </div>
+                    <span class="text-gray-400 text-xs">Больше</span>
+                </div>
+                
+                <div class="text-gray-400 text-xs">
+                    Всего: <span class="text-purple-400 font-bold">{{ $repetitionDates->sum('count') }}</span>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+@push('styles')
+<style>
+    .calendar-container {
+        display: grid;
+        gap: 3px;
+        padding: 2px;
+    }
+    
+    .calendar-week {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+    
+    .calendar-day {
+        width: 11px;
+        height: 11px;
+        border-radius: 2px;
+        cursor: pointer;
+        transition: all 0.2s;
+        flex-shrink: 0;
+    }
+    
+    .calendar-day:hover {
+        transform: scale(1.3);
+        z-index: 10;
+        position: relative;
+    }
+    
+    .calendar-today {
+        outline: 2px solid #a855f7;
+        outline-offset: 1px;
+    }
+    
+    @media (max-width: 1024px) {
+        #calendar-grid {
+            grid-template-columns: repeat(26, 1fr) !important;
+        }
+    }
+    
+    @media (max-width: 640px) {
+        #calendar-grid {
+            grid-template-columns: repeat(13, 1fr) !important;
+        }
+    }
+</style>
+@endpush
 @endsection

@@ -7,7 +7,7 @@
     <h1 class="text-4xl font-bold mb-8 text-purple-400">Добавить слово</h1>
     
     <div class="bg-gray-800 rounded-lg shadow-lg p-8">
-        <form method="POST" action="{{ route('admin.dictionary.store') }}">
+        <form method="POST" action="{{ route('admin.dictionary.store') }}" enctype="multipart/form-data">
             @csrf
             
             <div class="mb-4">
@@ -78,10 +78,26 @@
                           class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500 japanese-font">{{ old('example_jp') }}</textarea>
             </div>
             
-            <div class="mb-6">
+            <div class="mb-4">
                 <label for="example_ru" class="block text-gray-300 mb-2">Пример на русском (опционально)</label>
                 <textarea id="example_ru" name="example_ru" rows="2"
                           class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">{{ old('example_ru') }}</textarea>
+            </div>
+            
+            <div class="mb-6">
+                <label for="audio_file" class="block text-gray-300 mb-2">
+                    Аудио файл (MP3)
+                    <span class="text-yellow-400 text-sm">*опционально</span>
+                </label>
+                <input type="file" id="audio_file" name="audio_file" accept="audio/mpeg,audio/mp3"
+                       class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">
+                <p class="text-gray-400 text-sm mt-1">
+                    Формат: MP3. Максимальный размер: 5MB. 
+                    Файл будет сохранен в: <code class="text-purple-400">storage/app/public/audio/words/</code>
+                </p>
+                @error('audio_file')
+                    <p class="text-red-400 text-sm mt-1">{{ $message }}</p>
+                @enderror
             </div>
             
             <div class="flex space-x-4">

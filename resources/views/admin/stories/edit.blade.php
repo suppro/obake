@@ -2,12 +2,16 @@
 
 @section('title', 'Редактировать рассказ - Obake')
 
+@php
+use Illuminate\Support\Facades\Storage;
+@endphp
+
 @section('content')
 <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <h1 class="text-4xl font-bold mb-8 text-purple-400">Редактировать рассказ</h1>
     
     <div class="bg-gray-800 rounded-lg shadow-lg p-8">
-        <form method="POST" action="{{ route('admin.stories.update', $story->id) }}">
+        <form method="POST" action="{{ route('admin.stories.update', $story->id) }}" enctype="multipart/form-data">
             @csrf
             @method('PUT')
             
@@ -50,6 +54,39 @@
                           class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500"
                           style="font-family: 'Noto Sans JP', sans-serif;">{{ old('content', $story->content) }}</textarea>
                 @error('content')
+                    <p class="text-red-400 text-sm mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+            
+            <div class="mb-4">
+                <label for="audio_file" class="block text-gray-300 mb-2">
+                    Аудио файл (MP3)
+                    <span class="text-yellow-400 text-sm">*опционально</span>
+                </label>
+                @if($story->audio_path)
+                    <div class="mb-2 p-3 bg-gray-700 rounded-lg">
+                        <p class="text-gray-300 text-sm mb-2">Текущий аудио файл:</p>
+                        <audio controls class="w-full">
+                            <source src="{{ Storage::disk('public')->url($story->audio_path) }}" type="audio/mpeg">
+                            Ваш браузер не поддерживает аудио элемент.
+                        </audio>
+                        <label class="flex items-center mt-2">
+                            <input type="checkbox" name="remove_audio" value="1"
+                                   class="rounded bg-gray-700 border-gray-600 text-red-600">
+                            <span class="ml-2 text-red-400 text-sm">Удалить текущий аудио файл</span>
+                        </label>
+                    </div>
+                @endif
+                <input type="file" id="audio_file" name="audio_file" accept="audio/mpeg,audio/mp3"
+                       class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">
+                <p class="text-gray-400 text-sm mt-1">
+                    Формат: MP3. Максимальный размер: 10MB. 
+                    Файл будет сохранен в: <code class="text-purple-400">storage/app/public/audio/stories/</code>
+                    @if($story->audio_path)
+                        <br>Загрузка нового файла заменит существующий.
+                    @endif
+                </p>
+                @error('audio_file')
                     <p class="text-red-400 text-sm mt-1">{{ $message }}</p>
                 @enderror
             </div>

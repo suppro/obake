@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\DictionaryController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\StoryController;
+use App\Http\Controllers\StudyController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminDictionaryController;
 use App\Http\Controllers\Admin\AdminStoryController;
@@ -30,12 +31,21 @@ Route::middleware('auth')->group(function () {
     // Словарь пользователя
     Route::get('/dictionary', [DictionaryController::class, 'index'])->name('dictionary.index');
     Route::post('/dictionary/add', [DictionaryController::class, 'addWord'])->name('dictionary.add');
+    Route::post('/dictionary/mark-completed', [DictionaryController::class, 'markAsCompleted'])->name('dictionary.mark-completed');
     Route::delete('/dictionary/{wordId}', [DictionaryController::class, 'removeWord'])->name('dictionary.remove');
     
     // Рассказы
     Route::get('/stories', [StoryController::class, 'index'])->name('stories.index');
     Route::get('/stories/{id}', [StoryController::class, 'show'])->name('stories.show');
     Route::post('/stories/{id}/mark-as-read', [StoryController::class, 'markAsRead'])->name('stories.mark-as-read');
+    
+    // Изучение слов
+    Route::get('/study', [StudyController::class, 'index'])->name('study.index');
+    Route::get('/study/calendar', [StudyController::class, 'calendar'])->name('study.calendar');
+    Route::post('/study/start', [StudyController::class, 'startStudying'])->name('study.start');
+    Route::get('/study/get-next-word', [StudyController::class, 'getNextWord'])->name('study.get-next-word');
+    Route::post('/study/check-answer', [StudyController::class, 'checkAnswer'])->name('study.check-answer');
+    Route::get('/study/get-extra-words', [StudyController::class, 'getExtraWords'])->name('study.get-extra-words');
 });
 
 // Админ панель

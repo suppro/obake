@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\GlobalDictionary;
 use App\Models\Story;
+use App\Models\WordStudyProgress;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class StoryController extends Controller
 {
@@ -39,10 +41,21 @@ class StoryController extends Controller
         // JavaScript автоматически найдет все слова, которые встречаются в тексте
         $words = GlobalDictionary::all()->keyBy('id');
         
+        // Получаем информацию о прогрессе изучения слов
+        $wordProgress = WordStudyProgress::where('user_id', $user->id)
+            ->get()
+            ->keyBy('word_id')
+            ->map(function($progress) {
+                return [
+                    'days_studied' => $progress->days_studied,
+                    'is_completed' => $progress->is_completed,
+                ];
+            });
+        
         // Проверяем, прочитан ли рассказ
         $isRead = $user->readStories()->get()->contains('id', $story->id);
 
-        return view('stories.show', compact('story', 'userWordIds', 'words', 'isRead'));
+        return view('stories.show', compact('story', 'userWordIds', 'words', 'isRead', 'wordProgress'));
     }
 
     public function markAsRead($id)
@@ -57,4 +70,5 @@ class StoryController extends Controller
         
         return response()->json(['success' => true, 'message' => 'Рассказ отмечен как прочитанный']);
     }
+
 }

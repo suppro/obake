@@ -25,6 +25,10 @@
                     <input type="checkbox" id="furigana-toggle" class="rounded bg-gray-700 border-gray-600 text-purple-600">
                     <span class="ml-2 text-gray-300">Фуригана</span>
                 </label>
+                <button id="speak-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition text-sm flex items-center">
+                    <span id="speak-icon">🔊</span>
+                    <span id="speak-text" class="ml-2">Озвучить</span>
+                </button>
                 @if(!$isRead)
                     <button id="mark-as-read-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition text-sm">
                         ✓ Отметить как прочитанное
@@ -43,6 +47,8 @@
         
         <div id="story-content" class="text-lg leading-relaxed japanese-font mb-8" 
              data-content="{{ htmlspecialchars($story->content, ENT_QUOTES, 'UTF-8') }}"
+             data-story-id="{{ $story->id }}"
+             data-story-audio-path="{{ $story->audio_path }}"
              data-words="{{ json_encode($words->keyBy('id')->map(function($word) {
                  return [
                      'id' => $word->id,
@@ -51,9 +57,11 @@
                      'translation_ru' => $word->translation_ru,
                      'translation_en' => $word->translation_en,
                      'word_type' => $word->word_type,
+                     'audio_path' => $word->audio_path,
                  ];
              })) }}"
-             data-user-words="{{ json_encode($userWordIds) }}">
+             data-user-words="{{ json_encode($userWordIds) }}"
+             data-word-progress="{{ json_encode($wordProgress) }}">
         </div>
         
         <div id="word-tooltip" class="fixed bg-gray-900 border border-gray-700 rounded-lg p-4 shadow-xl z-50 hidden">
@@ -69,18 +77,73 @@
         font-size: 1.25rem;
         line-height: 2;
     }
-    .word-highlight {
-        background-color: rgba(239, 68, 68, 0.3);
+    /* Подсветка для слов не в словаре - без подсветки */
+    
+    /* Подсветка для слов в словаре, но не начатых (0 дней) */
+    .word-highlight-not-started {
+        background-color: rgba(156, 163, 175, 0.3); /* серый */
         cursor: pointer;
         transition: background-color 0.2s;
     }
-    .word-highlight:hover {
+    .word-highlight-not-started:hover {
+        background-color: rgba(156, 163, 175, 0.5);
+    }
+    
+    /* Подсветка для начального уровня (0-3 дня) */
+    .word-highlight-beginner {
+        background-color: rgba(239, 68, 68, 0.3); /* красный */
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .word-highlight-beginner:hover {
         background-color: rgba(239, 68, 68, 0.5);
+    }
+    
+    /* Подсветка для среднего уровня (4-7 дней) */
+    .word-highlight-intermediate {
+        background-color: rgba(251, 191, 36, 0.3); /* желтый */
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .word-highlight-intermediate:hover {
+        background-color: rgba(251, 191, 36, 0.5);
+    }
+    
+    /* Подсветка для продвинутого уровня (8-9 дней) */
+    .word-highlight-advanced {
+        background-color: rgba(59, 130, 246, 0.3); /* синий */
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .word-highlight-advanced:hover {
+        background-color: rgba(59, 130, 246, 0.5);
+    }
+    
+    /* Подсветка для изученных слов (10 дней) */
+    .word-highlight-completed {
+        background-color: rgba(34, 197, 94, 0.3); /* зеленый */
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .word-highlight-completed:hover {
+        background-color: rgba(34, 197, 94, 0.5);
     }
     .furigana {
         font-size: 0.6em;
         position: relative;
         top: -0.5em;
+    }
+    .speaking {
+        background-color: rgba(59, 130, 246, 0.3) !important;
+        animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+        0%, 100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.7;
+        }
     }
 </style>
 @endpush
@@ -97,10 +160,12 @@ document.addEventListener('DOMContentLoaded', function() {
     let wordsData = {};
     let userWords = [];
     let rawContent = '';
+    let wordProgress = {};
     
     try {
         wordsData = JSON.parse(storyContent.dataset.words || '{}');
         userWords = JSON.parse(storyContent.dataset.userWords || '[]');
+        wordProgress = JSON.parse(storyContent.dataset.wordProgress || '{}');
         rawContent = storyContent.dataset.content || '';
     } catch (error) {
         console.error('Ошибка при парсинге данных:', error);
@@ -118,8 +183,89 @@ document.addEventListener('DOMContentLoaded', function() {
     const tooltip = document.getElementById('word-tooltip');
     const tooltipContent = document.getElementById('tooltip-content');
     
+    // Переменные для озвучки
+    let isSpeaking = false;
+    let currentUtterance = null;
+    let speechSynthesis = window.speechSynthesis;
+    let currentSpeakingElement = null;
+    let selectedVoice = null;
+    
+    // Функция для выбора лучшего японского голоса
+    function selectBestJapaneseVoice() {
+        if (!speechSynthesis) return null;
+        
+        const voices = speechSynthesis.getVoices();
+        if (voices.length === 0) return null;
+        
+        // Приоритет: Neural voices > Premium voices > Standard voices
+        // Ищем голоса с "Neural" или "Premium" в названии
+        let neuralVoice = voices.find(v => 
+            v.lang.startsWith('ja') && 
+            (v.name.includes('Neural') || v.name.includes('Premium') || v.name.includes('Enhanced'))
+        );
+        
+        if (neuralVoice) return neuralVoice;
+        
+        // Ищем любой японский голос женского пола (обычно звучат лучше)
+        let femaleVoice = voices.find(v => 
+            v.lang.startsWith('ja') && 
+            (v.name.includes('Female') || v.name.includes('女') || v.name.includes('F'))
+        );
+        
+        if (femaleVoice) return femaleVoice;
+        
+        // Ищем любой японский голос
+        let japaneseVoice = voices.find(v => v.lang.startsWith('ja'));
+        
+        return japaneseVoice || null;
+    }
+    
+    // Загружаем голоса (может потребоваться время)
+    function loadVoices() {
+        const voices = speechSynthesis.getVoices();
+        if (voices.length > 0) {
+            selectedVoice = selectBestJapaneseVoice();
+            if (selectedVoice) {
+                console.log('Выбран голос:', selectedVoice.name, selectedVoice.lang);
+            } else {
+                console.warn('Японский голос не найден, будет использован голос по умолчанию');
+            }
+        }
+    }
+    
+    // Загружаем голоса сразу и при их загрузке
+    loadVoices();
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+        speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    
+    // Функция для определения класса подсветки на основе прогресса изучения
+    function getHighlightClass(wordId, userWordIds, progress) {
+        if (!userWordIds.includes(wordId)) {
+            return ''; // Слово не в словаре
+        }
+        
+        const wordProg = progress[wordId];
+        if (!wordProg) {
+            return 'word-highlight-not-started'; // Слово в словаре, но не начато изучение
+        }
+        
+        if (wordProg.is_completed) {
+            return 'word-highlight-completed'; // Изучено (10 дней)
+        }
+        
+        const daysStudied = wordProg.days_studied || 0;
+        if (daysStudied >= 8) {
+            return 'word-highlight-advanced'; // 8-9 дней
+        } else if (daysStudied >= 4) {
+            return 'word-highlight-intermediate'; // 4-7 дней
+        } else {
+            return 'word-highlight-beginner'; // 0-3 дня
+        }
+    }
+    
     // Функция для разметки текста
-    function processStoryContent(content, words, userWordIds, showFurigana) {
+    function processStoryContent(content, words, userWordIds, showFurigana, progress) {
         if (!content) return '';
         if (!words || Object.keys(words).length === 0) return content;
         
@@ -292,8 +438,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Заменяем совпадения
         matches.forEach(({start, end, match, word, reading: formReading, key}) => {
-            const isInDictionary = userWordIds.includes(word.id);
-            const highlightClass = isInDictionary ? 'word-highlight' : '';
+            const highlightClass = getHighlightClass(word.id, userWordIds, progress);
             
             // Используем чтение для конкретной формы, если оно есть
             const readingToUse = formReading || word.reading || '';
@@ -749,7 +894,7 @@ document.addEventListener('DOMContentLoaded', function() {
     furiganaToggle.addEventListener('change', function() {
         furiganaEnabled = this.checked;
         const content = rawContent;
-        storyContent.innerHTML = processStoryContent(content, wordsData, userWords, furiganaEnabled);
+        storyContent.innerHTML = processStoryContent(content, wordsData, userWords, furiganaEnabled, wordProgress);
         attachWordEvents();
     });
     
@@ -774,9 +919,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         ${word.reading ? `<div class="text-gray-400 mb-2">${word.reading}</div>` : ''}
                         <div class="text-gray-300 mb-1">${word.translation_ru}</div>
                         ${word.translation_en ? `<div class="text-gray-400 text-sm">${word.translation_en}</div>` : ''}
-                        <button class="mt-3 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded add-to-dict" data-word-id="${wordId}">
-                            Добавить в словарь
-                        </button>
+                        <div class="mt-3 flex gap-2">
+                            <button class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm speak-word-btn" data-word-id="${wordId}" data-word-text="${escapeHtml(word.japanese)}" title="Озвучить слово">
+                                🔊
+                            </button>
+                            <button class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded text-sm add-to-dict" data-word-id="${wordId}">
+                                Добавить в словарь
+                            </button>
+                        </div>
                     `;
                     
                     // Показываем tooltip сначала невидимым, чтобы получить его размеры
@@ -841,9 +991,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = await response.json();
                 
                 if (response.ok && data.success) {
+                    // Обновляем массив слов пользователя
+                    if (!userWords.includes(wordId)) {
+                        userWords.push(wordId);
+                    }
+                    
+                    // Обновляем прогресс (слово только что добавлено, значит не начато)
+                    wordProgress[wordId] = {
+                        days_studied: 0,
+                        is_completed: false
+                    };
+                    
                     // Добавляем подсветку всем экземплярам слова
                     document.querySelectorAll(`[data-word-id="${wordId}"]`).forEach(el => {
-                        el.classList.add('word-highlight');
+                        // Удаляем все возможные классы подсветки
+                        el.classList.remove('word-highlight-not-started', 'word-highlight-beginner', 
+                                          'word-highlight-intermediate', 'word-highlight-advanced', 
+                                          'word-highlight-completed');
+                        // Добавляем правильный класс
+                        el.classList.add('word-highlight-not-started');
                     });
                     
                     // Обновляем кнопку
@@ -879,7 +1045,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('wordsData keys:', Object.keys(wordsData).length);
         console.log('userWords:', userWords.length);
         
-        const processedContent = processStoryContent(rawContent, wordsData, userWords, furiganaEnabled);
+        const processedContent = processStoryContent(rawContent, wordsData, userWords, furiganaEnabled, wordProgress);
         console.log('Обработанный контент length:', processedContent.length);
         
         storyContent.innerHTML = processedContent;
@@ -890,6 +1056,334 @@ document.addEventListener('DOMContentLoaded', function() {
         // В случае ошибки показываем исходный текст
         storyContent.innerHTML = rawContent || '<p class="text-purple-400">Ошибка при загрузке текста</p>';
     }
+    
+    // Функция для извлечения чистого текста из HTML
+    function extractTextFromHTML(html) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        return tempDiv.textContent || tempDiv.innerText || '';
+    }
+    
+    // Функция для разбиения текста на предложения
+    function splitIntoSentences(text) {
+        // Разбиваем по японским знакам препинания: 。！？, а также по переносам строк
+        // Сохраняем знаки препинания вместе с предложениями
+        const sentences = [];
+        const parts = text.split(/([。！？\n]+)/);
+        
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i].trim();
+            if (!part) continue;
+            
+            // Если это знак препинания, добавляем к предыдущему предложению
+            if (/^[。！？\n]+$/.test(part)) {
+                if (sentences.length > 0) {
+                    sentences[sentences.length - 1] += part;
+                }
+            } else {
+                sentences.push(part);
+            }
+        }
+        
+        return sentences.filter(s => s.trim().length > 0);
+    }
+    
+    // Функция для озвучки текста через браузерный API
+    function speakTextBrowser(text) {
+        return new Promise((resolve, reject) => {
+            if (!speechSynthesis) {
+                reject(new Error('Speech synthesis не поддерживается в этом браузере'));
+                return;
+            }
+            
+            // Обновляем список голосов перед каждой озвучкой
+            loadVoices();
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ja-JP';
+            
+            // Используем выбранный голос, если доступен
+            if (selectedVoice) {
+                utterance.voice = selectedVoice;
+            }
+            
+            // Более естественные параметры для лучшего звучания
+            utterance.rate = 0.95; // Немного медленнее для лучшей разборчивости
+            utterance.pitch = 1.05; // Немного выше для более естественного звучания
+            utterance.volume = 1.0;
+            
+            utterance.onend = () => {
+                resolve();
+            };
+            
+            utterance.onerror = (error) => {
+                console.error('Ошибка озвучки:', error);
+                reject(error);
+            };
+            
+            currentUtterance = utterance;
+            speechSynthesis.speak(utterance);
+        });
+    }
+    
+    // Функция для озвучки текста
+    function speakText(text) {
+        return speakTextBrowser(text);
+    }
+    
+    // Функция для озвучки всего рассказа
+    async function speakStory() {
+        if (isSpeaking) {
+            // Останавливаем озвучку
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio = null;
+            }
+            speechSynthesis.cancel();
+            isSpeaking = false;
+            updateSpeakButton(false);
+            if (currentSpeakingElement) {
+                currentSpeakingElement.classList.remove('speaking');
+                currentSpeakingElement = null;
+            }
+            return;
+        }
+        
+        isSpeaking = true;
+        updateSpeakButton(true);
+        
+        const storyId = storyContent.dataset.storyId;
+        const audioPath = storyContent.dataset.storyAudioPath;
+        
+        // Проверяем, есть ли сохраненное аудио
+        if (audioPath) {
+            // Используем сохраненное аудио
+            try {
+                const audioUrl = '{{ url("/storage") }}/' + audioPath;
+                currentAudio = new Audio(audioUrl);
+                
+                currentAudio.onended = () => {
+                    isSpeaking = false;
+                    updateSpeakButton(false);
+                    currentAudio = null;
+                };
+                
+                currentAudio.onerror = () => {
+                    // Если файл не найден, используем браузерную озвучку
+                    console.error('Аудио файл не найден, используется браузерная озвучка');
+                    isSpeaking = false;
+                    updateSpeakButton(false);
+                    currentAudio = null;
+                    speakStoryBrowser();
+                };
+                
+                await currentAudio.play();
+                return;
+            } catch (error) {
+                console.error('Ошибка воспроизведения аудио:', error);
+                // Используем браузерную озвучку
+                isSpeaking = false;
+                updateSpeakButton(false);
+                speakStoryBrowser();
+            }
+        }
+        
+        // Если аудио нет, используем браузерную озвучку
+        await speakStoryBrowser();
+    }
+    
+    let currentAudio = null;
+    
+    // Функция для браузерной озвучки (старая логика)
+    async function speakStoryBrowser() {
+        // Проверяем поддержку
+        if (!speechSynthesis) {
+            alert('Ваш браузер не поддерживает озвучку текста');
+            isSpeaking = false;
+            updateSpeakButton(false);
+            return;
+        }
+        
+        // Получаем весь текст из story-content
+        const storyText = storyContent.innerText || storyContent.textContent || '';
+        
+        if (!storyText.trim()) {
+            alert('Текст для озвучки не найден');
+            isSpeaking = false;
+            updateSpeakButton(false);
+            return;
+        }
+        
+        // Разбиваем на предложения
+        const sentences = splitIntoSentences(storyText);
+        
+        // Озвучиваем по предложениям
+        try {
+            // Получаем все текстовые элементы
+            const allElements = Array.from(storyContent.querySelectorAll('.word-item'));
+            
+            // Собираем весь текст из элементов для точного сопоставления
+            let accumulatedText = '';
+            const elementTextMap = [];
+            
+            allElements.forEach((el, index) => {
+                const elText = el.textContent || el.innerText || '';
+                const startPos = accumulatedText.length;
+                accumulatedText += elText;
+                elementTextMap.push({
+                    element: el,
+                    start: startPos,
+                    end: accumulatedText.length,
+                    text: elText
+                });
+            });
+            
+            for (let i = 0; i < sentences.length; i++) {
+                if (!isSpeaking) break; // Проверяем, не была ли остановлена озвучка
+                
+                const sentence = sentences[i].trim();
+                if (!sentence || sentence.length < 1) continue;
+                
+                // Находим позицию предложения в накопленном тексте
+                const sentenceStart = accumulatedText.indexOf(sentence);
+                
+                // Убираем подсветку с предыдущих элементов
+                if (currentSpeakingElement) {
+                    if (currentSpeakingElement.classList) {
+                        currentSpeakingElement.classList.remove('speaking');
+                    }
+                }
+                
+                // Находим элементы, которые попадают в диапазон этого предложения
+                let foundElements = [];
+                
+                if (sentenceStart !== -1) {
+                    const sentenceEnd = sentenceStart + sentence.length;
+                    
+                    elementTextMap.forEach(item => {
+                        // Проверяем, пересекается ли элемент с предложением
+                        if (item.start < sentenceEnd && item.end > sentenceStart) {
+                            foundElements.push(item.element);
+                        }
+                    });
+                } else {
+                    // Если не нашли точное совпадение, ищем по первым символам
+                    const firstChars = sentence.substring(0, Math.min(10, sentence.length));
+                    elementTextMap.forEach(item => {
+                        if (item.text.includes(firstChars)) {
+                            foundElements.push(item.element);
+                        }
+                    });
+                }
+                
+                // Подсвечиваем найденные элементы
+                if (foundElements.length > 0) {
+                    foundElements.forEach(el => {
+                        el.classList.add('speaking');
+                    });
+                    currentSpeakingElement = foundElements[0];
+                    
+                    // Прокручиваем к первому элементу
+                    foundElements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                
+                // Озвучиваем предложение
+                await speakText(sentence);
+                
+                // Убираем подсветку после озвучки
+                foundElements.forEach(el => {
+                    el.classList.remove('speaking');
+                });
+            }
+        } catch (error) {
+            console.error('Ошибка при озвучке:', error);
+            alert('Произошла ошибка при озвучке текста');
+        } finally {
+            // Убираем подсветку
+            if (currentSpeakingElement) {
+                currentSpeakingElement.classList.remove('speaking');
+                currentSpeakingElement = null;
+            }
+            isSpeaking = false;
+            updateSpeakButton(false);
+        }
+    }
+    
+    // Функция для обновления кнопки озвучки
+    function updateSpeakButton(speaking) {
+        const speakBtn = document.getElementById('speak-btn');
+        const speakIcon = document.getElementById('speak-icon');
+        const speakText = document.getElementById('speak-text');
+        
+        if (speaking) {
+            speakIcon.textContent = '⏸️';
+            speakText.textContent = 'Остановить';
+            speakBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            speakBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+        } else {
+            speakIcon.textContent = '🔊';
+            speakText.textContent = 'Озвучить';
+            speakBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+            speakBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        }
+    }
+    
+    // Обработка кнопки озвучки
+    const speakBtn = document.getElementById('speak-btn');
+    if (speakBtn) {
+        speakBtn.addEventListener('click', speakStory);
+    }
+    
+    // Останавливаем озвучку при уходе со страницы
+    window.addEventListener('beforeunload', () => {
+        if (speechSynthesis && isSpeaking) {
+            speechSynthesis.cancel();
+        }
+        if (currentAudio) {
+            currentAudio.pause();
+        }
+    });
+    
+    // Функция для озвучки слова
+    async function speakWord(wordId, wordText) {
+        const word = wordsData[wordId];
+        if (!word) return;
+        
+        // Проверяем, есть ли сохраненное аудио
+        if (word.audio_path) {
+            try {
+                const audioUrl = '{{ url("/storage") }}/' + word.audio_path;
+                const audio = new Audio(audioUrl);
+                await audio.play();
+                return;
+            } catch (error) {
+                console.error('Ошибка воспроизведения аудио:', error);
+            }
+        }
+        
+        // Если аудио нет, используем браузерную озвучку
+        if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(wordText || word.japanese);
+            utterance.lang = 'ja-JP';
+            if (selectedVoice) {
+                utterance.voice = selectedVoice;
+            }
+            speechSynthesis.speak(utterance);
+        } else {
+            alert('Озвучка не поддерживается в вашем браузере');
+        }
+    }
+    
+    // Обработка кнопок озвучки слов (делегирование событий)
+    document.addEventListener('click', async function(e) {
+        if (e.target.classList.contains('speak-word-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const wordId = parseInt(e.target.dataset.wordId);
+            const wordText = e.target.dataset.wordText;
+            await speakWord(wordId, wordText);
+        }
+    });
     
     // Обработка кнопки "Отметить как прочитанное"
     const markAsReadBtn = document.getElementById('mark-as-read-btn');

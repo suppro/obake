@@ -7,7 +7,7 @@
     <h1 class="text-4xl font-bold mb-8 text-purple-400">Создать рассказ</h1>
     
     <div class="bg-gray-800 rounded-lg shadow-lg p-8">
-        <form method="POST" action="{{ route('admin.stories.store') }}">
+        <form method="POST" action="{{ route('admin.stories.store') }}" enctype="multipart/form-data">
             @csrf
             
             <div class="mb-4">
@@ -49,6 +49,22 @@
                           class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500 font-japanese"
                           style="font-family: 'Noto Sans JP', sans-serif;">{{ old('content') }}</textarea>
                 @error('content')
+                    <p class="text-red-400 text-sm mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+            
+            <div class="mb-4">
+                <label for="audio_file" class="block text-gray-300 mb-2">
+                    Аудио файл (MP3)
+                    <span class="text-yellow-400 text-sm">*опционально</span>
+                </label>
+                <input type="file" id="audio_file" name="audio_file" accept="audio/mpeg,audio/mp3"
+                       class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">
+                <p class="text-gray-400 text-sm mt-1">
+                    Формат: MP3. Максимальный размер: 10MB. 
+                    Файл будет сохранен в: <code class="text-purple-400">storage/app/public/audio/stories/</code>
+                </p>
+                @error('audio_file')
                     <p class="text-red-400 text-sm mt-1">{{ $message }}</p>
                 @enderror
             </div>
