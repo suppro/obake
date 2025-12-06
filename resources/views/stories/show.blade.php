@@ -1219,18 +1219,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 const audioUrl = '{{ url("/storage") }}/' + audioPath;
                 currentAudio = new Audio(audioUrl);
                 
+                // Предзагружаем аудио для возможности перемотки
+                currentAudio.preload = 'auto';
+                
                 // Настраиваем обработчики событий
                 currentAudio.addEventListener('loadedmetadata', () => {
                     if (!isDraggingProgress) updateAudioPlayer();
                 });
+                currentAudio.addEventListener('canplay', () => {
+                    // Аудио готово к воспроизведению
+                    if (!isDraggingProgress) updateAudioPlayer();
+                });
+                currentAudio.addEventListener('canplaythrough', () => {
+                    // Аудио полностью загружено и готово к перемотке
+                    if (!isDraggingProgress) updateAudioPlayer();
+                });
                 currentAudio.addEventListener('timeupdate', () => {
                     // Не обновляем во время перетаскивания, чтобы не сбрасывать позицию
-                    if (!isDraggingProgress) {
+                    if (!isDraggingProgress && currentAudio) {
+                        updateAudioPlayer();
+                    }
+                });
+                currentAudio.addEventListener('seeking', () => {
+                    // Во время перемотки не обновляем проигрыватель
+                });
+                currentAudio.addEventListener('seeked', () => {
+                    // После завершения перемотки обновляем проигрыватель
+                    if (!isDraggingProgress && currentAudio) {
                         updateAudioPlayer();
                     }
                 });
                 currentAudio.addEventListener('play', () => {
-                    if (!isDraggingProgress) {
+                    if (!isDraggingProgress && currentAudio) {
                         // Проверяем, что время не было сброшено на 0
                         // Если время 0, но мы не в начале, значит что-то пошло не так
                         if (currentAudio.currentTime === 0 && audioProgress && parseFloat(audioProgress.value) > 0) {
@@ -1242,7 +1262,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 });
                 currentAudio.addEventListener('pause', () => {
-                    if (!isDraggingProgress) updateAudioPlayer();
+                    if (!isDraggingProgress && currentAudio) {
+                        updateAudioPlayer();
+                    }
                 });
                 currentAudio.addEventListener('ended', () => {
                     isSpeaking = false;
@@ -1256,6 +1278,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 
                 isSpeaking = true;
+                
+                // Ждем, пока аудио будет готово к воспроизведению
+                await new Promise((resolve) => {
+                    if (currentAudio.readyState >= 3) { // HAVE_FUTURE_DATA
+                        resolve();
+                    } else {
+                        currentAudio.addEventListener('canplay', resolve, { once: true });
+                    }
+                });
+                
                 await currentAudio.play();
                 updateAudioPlayer();
                 return;
@@ -1580,93 +1612,150 @@ document.addEventListener('DOMContentLoaded', function() {
                 audioProgress.value = progress;
             }
             
-            // Устанавливаем время напрямую
-            currentAudio.currentTime = newTime;
-            
-            // Возобновляем воспроизведение, если оно было запущено
-            if (shouldResume) {
-                // Используем событие 'seeked' для гарантии, что время установлено
-                const onSeeked = () => {
-                    if (currentAudio && currentAudio.paused) {
-                        // Проверяем время перед запуском
-                        const actualTime = currentAudio.currentTime;
-                        if (Math.abs(actualTime - newTime) < 1.0) {
-                            // Время установлено правильно, запускаем
-                            // Добавляем защиту от сброса времени при play
-                            const onPlayProtection = () => {
-                                // Если время сбросилось на 0, восстанавливаем его
-                                if (currentAudio && currentAudio.currentTime === 0 && progress > 0) {
-                                    const restoreTime = currentAudio.duration * (progress / 100);
-                                    currentAudio.currentTime = restoreTime;
-                                }
-                            };
-                            currentAudio.addEventListener('play', onPlayProtection, { once: true });
-                            
-                            // Также проверяем время после небольшой задержки после play
-                            const checkAfterPlay = () => {
-                                setTimeout(() => {
-                                    if (currentAudio && currentAudio.currentTime === 0 && progress > 0) {
-                                        const restoreTime = currentAudio.duration * (progress / 100);
-                                        currentAudio.currentTime = restoreTime;
-                                    }
-                                }, 50);
-                            };
-                            
-                            currentAudio.play()
-                                .then(() => checkAfterPlay())
-                                .catch(e => console.error('Ошибка воспроизведения:', e));
-                        } else {
-                            // Время не установилось, устанавливаем еще раз
-                            currentAudio.currentTime = newTime;
-                            setTimeout(() => {
-                                if (currentAudio && currentAudio.paused) {
-                                    currentAudio.play().catch(e => console.error('Ошибка воспроизведения:', e));
-                                }
-                            }, 50);
+            // Функция для установки времени с проверкой готовности аудио
+            const setTimeAndPlay = (targetTime, shouldPlay) => {
+                if (!currentAudio) return;
+                
+                console.log('setTimeAndPlay: targetTime =', targetTime, 'readyState =', currentAudio.readyState, 'duration =', currentAudio.duration);
+                
+                // Проверяем, что аудио готово к перемотке (readyState >= 2 означает HAVE_CURRENT_DATA)
+                // readyState: 0=HAVE_NOTHING, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA
+                if (currentAudio.readyState < 2) {
+                    console.log('Аудио не готово (readyState < 2), ждем canplay/loadeddata');
+                    // Аудио еще не готово, ждем
+                    const onCanPlay = () => {
+                        if (currentAudio) {
+                            console.log('Аудио готово, readyState =', currentAudio.readyState);
+                            currentAudio.removeEventListener('canplay', onCanPlay);
+                            currentAudio.removeEventListener('loadeddata', onCanPlay);
+                            setTimeAndPlay(targetTime, shouldPlay);
                         }
+                    };
+                    currentAudio.addEventListener('canplay', onCanPlay, { once: true });
+                    currentAudio.addEventListener('loadeddata', onCanPlay, { once: true });
+                    // Принудительно загружаем данные
+                    currentAudio.load();
+                    return;
+                }
+                
+                // Устанавливаем время
+                try {
+                    console.log('Устанавливаем currentTime =', targetTime, 'текущее значение =', currentAudio.currentTime);
+                    currentAudio.currentTime = targetTime;
+                    console.log('После установки currentTime =', currentAudio.currentTime);
+                } catch (e) {
+                    console.error('Ошибка установки времени:', e);
+                    // Если не удалось установить время, ждем готовности
+                    const onCanPlay = () => {
+                        if (currentAudio) {
+                            try {
+                                console.log('Повторная попытка установки времени после canplay');
+                                currentAudio.currentTime = targetTime;
+                            } catch (e2) {
+                                console.error('Ошибка установки времени после canplay:', e2);
+                            }
+                        }
+                    };
+                    currentAudio.addEventListener('canplay', onCanPlay, { once: true });
+                    return;
+                }
+                
+                // Определяем, является ли браузер Chrome
+                const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+                
+                // Ждем события seeked для подтверждения установки времени
+                const onSeeked = () => {
+                    if (!currentAudio) return;
+                    
+                    // Проверяем, что время установлено правильно
+                    const actualTime = currentAudio.currentTime;
+                    if (Math.abs(actualTime - targetTime) < 1.0) {
+                        // Время установлено правильно
+                        if (shouldPlay && currentAudio.paused) {
+                            // Для Chrome нужна особая обработка
+                            if (isChrome) {
+                                // В Chrome устанавливаем время еще раз прямо перед play
+                                currentAudio.currentTime = targetTime;
+                                
+                                // Ждем еще один seeked для Chrome
+                                const onSeekedChrome = () => {
+                                    if (!currentAudio) return;
+                                    
+                                    // Проверяем время еще раз
+                                    const checkTime = currentAudio.currentTime;
+                                    if (Math.abs(checkTime - targetTime) < 1.0) {
+                                        // Время установлено, запускаем
+                                        currentAudio.play().catch(e => console.error('Ошибка воспроизведения:', e));
+                                        
+                                        // Добавляем защиту от сброса времени в Chrome
+                                        const onPlayChrome = () => {
+                                            // Проверяем время сразу после play
+                                            setTimeout(() => {
+                                                if (currentAudio && currentAudio.currentTime === 0 && targetTime > 0) {
+                                                    // Время сбросилось в Chrome, восстанавливаем
+                                                    currentAudio.pause();
+                                                    currentAudio.currentTime = targetTime;
+                                                    const onSeekedRetry = () => {
+                                                        currentAudio.play().catch(e => console.error('Ошибка воспроизведения:', e));
+                                                    };
+                                                    currentAudio.addEventListener('seeked', onSeekedRetry, { once: true });
+                                                }
+                                            }, 20);
+                                            
+                                            // Проверяем еще раз через 100мс
+                                            setTimeout(() => {
+                                                if (currentAudio && currentAudio.currentTime === 0 && targetTime > 0) {
+                                                    // Время все еще 0, восстанавливаем и перезапускаем
+                                                    currentAudio.pause();
+                                                    currentAudio.currentTime = targetTime;
+                                                    const onSeekedRetry = () => {
+                                                        currentAudio.play().catch(e => console.error('Ошибка воспроизведения:', e));
+                                                    };
+                                                    currentAudio.addEventListener('seeked', onSeekedRetry, { once: true });
+                                                }
+                                            }, 100);
+                                        };
+                                        currentAudio.addEventListener('play', onPlayChrome, { once: true });
+                                    }
+                                };
+                                currentAudio.addEventListener('seeked', onSeekedChrome, { once: true });
+                            } else {
+                                // Для других браузеров (Firefox и т.д.)
+                                currentAudio.play().catch(e => console.error('Ошибка воспроизведения:', e));
+                            }
+                        }
+                    } else {
+                        // Время не установилось, пытаемся еще раз
+                        console.log('Время не установилось. Повторная попытка. Ожидалось:', targetTime, 'Получено:', actualTime);
+                        setTimeout(() => {
+                            if (currentAudio) {
+                                try {
+                                    currentAudio.currentTime = targetTime;
+                                } catch (e) {
+                                    console.error('Ошибка повторной установки времени:', e);
+                                }
+                            }
+                        }, 50);
                     }
                 };
                 
-                // Добавляем обработчик с once: true для автоматического удаления
                 currentAudio.addEventListener('seeked', onSeeked, { once: true });
                 
-                // Fallback на случай, если событие seeked не сработает
+                // Fallback - если seeked не сработает
                 setTimeout(() => {
-                    if (currentAudio && currentAudio.paused) {
-                        const actualTime = currentAudio.currentTime;
-                        // Если время близко к нужному, запускаем
-                        if (Math.abs(actualTime - newTime) < 1.0) {
-                            // Добавляем защиту от сброса времени
-                            const onPlayProtection = () => {
-                                if (currentAudio && currentAudio.currentTime === 0 && progress > 0) {
-                                    const restoreTime = currentAudio.duration * (progress / 100);
-                                    currentAudio.currentTime = restoreTime;
-                                }
-                            };
-                            currentAudio.addEventListener('play', onPlayProtection, { once: true });
-                            
-                            currentAudio.play()
-                                .then(() => {
-                                    setTimeout(() => {
-                                        if (currentAudio && currentAudio.currentTime === 0 && progress > 0) {
-                                            const restoreTime = currentAudio.duration * (progress / 100);
-                                            currentAudio.currentTime = restoreTime;
-                                        }
-                                    }, 50);
-                                })
-                                .catch(e => console.error('Ошибка воспроизведения:', e));
-                        } else {
-                            // Иначе устанавливаем время еще раз
-                            currentAudio.currentTime = newTime;
-                            setTimeout(() => {
-                                if (currentAudio && currentAudio.paused) {
-                                    currentAudio.play().catch(e => console.error('Ошибка воспроизведения:', e));
-                                }
-                            }, 50);
+                    if (currentAudio && Math.abs(currentAudio.currentTime - targetTime) > 1.0) {
+                        // Время все еще не установлено, пытаемся еще раз
+                        try {
+                            currentAudio.currentTime = targetTime;
+                        } catch (e) {
+                            console.error('Ошибка установки времени в fallback:', e);
                         }
                     }
-                }, 150);
-            }
+                }, 100);
+            };
+            
+            // Устанавливаем время и возобновляем воспроизведение, если нужно
+            setTimeAndPlay(newTime, shouldResume);
             
             // Обновляем проигрыватель после небольшой задержки
             setTimeout(() => {

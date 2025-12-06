@@ -23,3 +23,8 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# <<< ЭТО ВСЁ, ЧТО НУЖНО ДОБАВИТЬ >>>
+<IfModule mod_headers.c>
+    Header set Accept-Ranges bytes
+</IfModule>
