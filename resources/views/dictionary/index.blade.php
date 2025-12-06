@@ -61,15 +61,16 @@
                                 <div class="text-gray-400 text-sm">{{ $word->translation_en }}</div>
                             @endif
                         </div>
-                        <div class="flex gap-2 ml-4">
+                        <div class="flex gap-2 ml-4 items-center">
                             <button 
                                 type="button"
-                                class="speak-word-btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition text-sm"
+                                class="speak-word-btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition text-sm flex items-center gap-1"
                                 data-word-id="{{ $word->id }}"
                                 data-word-text="{{ $word->japanese_word }}"
                                 data-word-audio-path="{{ $word->audio_path }}"
                                 title="Озвучить слово">
-                                🔊
+                                <span class="word-play-icon">▶</span>
+                                <span class="word-audio-time text-xs"></span>
                             </button>
                             @if(!$isCompleted)
                                 <button 

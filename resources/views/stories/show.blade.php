@@ -25,10 +25,22 @@
                     <input type="checkbox" id="furigana-toggle" class="rounded bg-gray-700 border-gray-600 text-purple-600">
                     <span class="ml-2 text-gray-300">Фуригана</span>
                 </label>
-                <button id="speak-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition text-sm flex items-center">
-                    <span id="speak-icon">🔊</span>
-                    <span id="speak-text" class="ml-2">Озвучить</span>
-                </button>
+                <!-- Аудио проигрыватель для рассказа -->
+                <div id="story-audio-player" class="bg-gray-700 rounded-lg p-3 flex items-center gap-3 min-w-[300px]">
+                    <button id="audio-play-pause-btn" class="bg-purple-600 hover:bg-purple-700 text-white w-10 h-10 rounded-full flex items-center justify-center transition flex-shrink-0" title="Озвучить рассказ">
+                        <span id="audio-play-icon">▶</span>
+                    </button>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <input type="range" id="audio-progress" min="0" max="100" value="0" 
+                                   class="flex-1 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer audio-slider">
+                            <span id="audio-time" class="text-gray-300 text-xs whitespace-nowrap">0:00 / 0:00</span>
+                        </div>
+                    </div>
+                    <button id="audio-stop-btn" class="bg-gray-600 hover:bg-gray-500 text-white w-8 h-8 rounded flex items-center justify-center transition flex-shrink-0 text-sm" title="Остановить">
+                        ⏹
+                    </button>
+                </div>
                 @if(!$isRead)
                     <button id="mark-as-read-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition text-sm">
                         ✓ Отметить как прочитанное
@@ -919,9 +931,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         ${word.reading ? `<div class="text-gray-400 mb-2">${word.reading}</div>` : ''}
                         <div class="text-gray-300 mb-1">${word.translation_ru}</div>
                         ${word.translation_en ? `<div class="text-gray-400 text-sm">${word.translation_en}</div>` : ''}
-                        <div class="mt-3 flex gap-2">
-                            <button class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm speak-word-btn" data-word-id="${wordId}" data-word-text="${escapeHtml(word.japanese)}" title="Озвучить слово">
-                                🔊
+                        <div class="mt-3 flex gap-2 items-center">
+                            <button class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm speak-word-btn flex items-center gap-1" data-word-id="${wordId}" data-word-text="${escapeHtml(word.japanese)}" data-word-audio-path="${word.audio_path || ''}" title="Озвучить слово">
+                                <span class="word-play-icon">▶</span>
+                                <span class="word-audio-time text-xs"></span>
                             </button>
                             <button class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded text-sm add-to-dict" data-word-id="${wordId}">
                                 Добавить в словарь
@@ -1133,27 +1146,19 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Функция для озвучки всего рассказа
     async function speakStory() {
-        if (isSpeaking) {
-            // Останавливаем озвучку
-            if (currentAudio) {
-                currentAudio.pause();
-                currentAudio = null;
-            }
-            speechSynthesis.cancel();
-            isSpeaking = false;
-            updateSpeakButton(false);
-            if (currentSpeakingElement) {
-                currentSpeakingElement.classList.remove('speaking');
-                currentSpeakingElement = null;
-            }
-            return;
-        }
-        
-        isSpeaking = true;
-        updateSpeakButton(true);
-        
         const storyId = storyContent.dataset.storyId;
         const audioPath = storyContent.dataset.storyAudioPath;
+        
+        // Если уже есть аудио, обрабатываем play/pause
+        if (currentAudio) {
+            if (currentAudio.paused) {
+                await currentAudio.play();
+            } else {
+                currentAudio.pause();
+            }
+            updateAudioPlayer();
+            return;
+        }
         
         // Проверяем, есть ли сохраненное аудио
         if (audioPath) {
@@ -1162,29 +1167,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 const audioUrl = '{{ url("/storage") }}/' + audioPath;
                 currentAudio = new Audio(audioUrl);
                 
-                currentAudio.onended = () => {
-                    isSpeaking = false;
-                    updateSpeakButton(false);
-                    currentAudio = null;
-                };
+                // Настраиваем обработчики событий
+                setupAudioEventListeners(currentAudio);
                 
-                currentAudio.onerror = () => {
-                    // Если файл не найден, используем браузерную озвучку
-                    console.error('Аудио файл не найден, используется браузерная озвучка');
-                    isSpeaking = false;
-                    updateSpeakButton(false);
-                    currentAudio = null;
-                    speakStoryBrowser();
-                };
-                
+                isSpeaking = true;
                 await currentAudio.play();
+                updateAudioPlayer();
                 return;
             } catch (error) {
                 console.error('Ошибка воспроизведения аудио:', error);
-                // Используем браузерную озвучку
-                isSpeaking = false;
-                updateSpeakButton(false);
-                speakStoryBrowser();
+                currentAudio = null;
+                updateAudioPlayer();
             }
         }
         
@@ -1200,7 +1193,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!speechSynthesis) {
             alert('Ваш браузер не поддерживает озвучку текста');
             isSpeaking = false;
-            updateSpeakButton(false);
+            updateAudioPlayer();
             return;
         }
         
@@ -1210,7 +1203,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!storyText.trim()) {
             alert('Текст для озвучки не найден');
             isSpeaking = false;
-            updateSpeakButton(false);
+            updateAudioPlayer();
             return;
         }
         
@@ -1305,33 +1298,134 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentSpeakingElement = null;
             }
             isSpeaking = false;
-            updateSpeakButton(false);
+            updateAudioPlayer();
         }
     }
     
-    // Функция для обновления кнопки озвучки
-    function updateSpeakButton(speaking) {
-        const speakBtn = document.getElementById('speak-btn');
-        const speakIcon = document.getElementById('speak-icon');
-        const speakText = document.getElementById('speak-text');
+    // Элементы аудио проигрывателя
+    const audioPlayer = document.getElementById('story-audio-player');
+    const audioPlayPauseBtn = document.getElementById('audio-play-pause-btn');
+    const audioPlayIcon = document.getElementById('audio-play-icon');
+    const audioProgress = document.getElementById('audio-progress');
+    const audioTime = document.getElementById('audio-time');
+    const audioStopBtn = document.getElementById('audio-stop-btn');
+    
+    // Функция для форматирования времени
+    function formatTime(seconds) {
+        if (isNaN(seconds) || !isFinite(seconds)) return '0:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    // Функция для обновления проигрывателя
+    function updateAudioPlayer() {
+        if (!audioPlayer) return;
         
-        if (speaking) {
-            speakIcon.textContent = '⏸️';
-            speakText.textContent = 'Остановить';
-            speakBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-            speakBtn.classList.add('bg-red-600', 'hover:bg-red-700');
-        } else {
-            speakIcon.textContent = '🔊';
-            speakText.textContent = 'Озвучить';
-            speakBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
-            speakBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        // Проигрыватель всегда виден
+        audioPlayer.classList.remove('hidden');
+        
+        // Если аудио нет, показываем начальное состояние
+        if (!currentAudio) {
+            if (audioTime) {
+                audioTime.textContent = '0:00 / 0:00';
+            }
+            if (audioProgress) {
+                audioProgress.value = 0;
+            }
+            if (audioPlayIcon) {
+                audioPlayIcon.textContent = '▶';
+            }
+            return;
+        }
+        
+        // Обновляем время
+        const current = currentAudio.currentTime || 0;
+        const duration = currentAudio.duration || 0;
+        if (audioTime) {
+            audioTime.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
+        }
+        
+        // Обновляем прогресс
+        if (audioProgress) {
+            const progress = duration > 0 ? (current / duration) * 100 : 0;
+            audioProgress.value = progress;
+        }
+        
+        // Обновляем иконку play/pause
+        if (audioPlayIcon) {
+            if (currentAudio.paused) {
+                audioPlayIcon.textContent = '▶';
+            } else {
+                audioPlayIcon.textContent = '⏸';
+            }
         }
     }
     
-    // Обработка кнопки озвучки
-    const speakBtn = document.getElementById('speak-btn');
-    if (speakBtn) {
-        speakBtn.addEventListener('click', speakStory);
+    // Обработка кнопки play/pause
+    if (audioPlayPauseBtn) {
+        audioPlayPauseBtn.addEventListener('click', async function() {
+            if (!currentAudio) {
+                await speakStory();
+                return;
+            }
+            
+            if (currentAudio.paused) {
+                await currentAudio.play();
+            } else {
+                currentAudio.pause();
+            }
+            updateAudioPlayer();
+        });
+    }
+    
+    // Обработка кнопки остановки
+    if (audioStopBtn) {
+        audioStopBtn.addEventListener('click', function() {
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+                isSpeaking = false;
+                currentAudio = null;
+                updateAudioPlayer();
+            }
+            // Останавливаем браузерную озвучку
+            if (speechSynthesis) {
+                speechSynthesis.cancel();
+            }
+        });
+    }
+    
+    // Обработка изменения прогресса
+    if (audioProgress) {
+        let isDragging = false;
+        
+        audioProgress.addEventListener('mousedown', () => {
+            isDragging = true;
+        });
+        
+        audioProgress.addEventListener('mouseup', () => {
+            if (currentAudio && isDragging) {
+                const progress = audioProgress.value / 100;
+                currentAudio.currentTime = currentAudio.duration * progress;
+                isDragging = false;
+            }
+        });
+        
+        audioProgress.addEventListener('input', () => {
+            if (currentAudio && isDragging) {
+                const progress = audioProgress.value / 100;
+                currentAudio.currentTime = currentAudio.duration * progress;
+            }
+        });
+        
+        // Обновление при перетаскивании
+        audioProgress.addEventListener('change', () => {
+            if (currentAudio && !isDragging) {
+                const progress = audioProgress.value / 100;
+                currentAudio.currentTime = currentAudio.duration * progress;
+            }
+        });
     }
     
     // Останавливаем озвучку при уходе со страницы
@@ -1344,17 +1438,86 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
+    // Инициализация проигрывателя при загрузке страницы
+    updateAudioPlayer();
+    
+    // Переменные для проигрывателя слов
+    let currentWordAudio = null;
+    let currentWordButton = null;
+    
     // Функция для озвучки слова
-    async function speakWord(wordId, wordText) {
+    async function speakWord(wordId, wordText, buttonElement) {
         const word = wordsData[wordId];
         if (!word) return;
+        
+        // Если уже играет это же слово, ставим на паузу/возобновляем
+        if (currentWordAudio && currentWordButton === buttonElement) {
+            if (currentWordAudio.paused) {
+                await currentWordAudio.play();
+                const icon = buttonElement.querySelector('.word-play-icon');
+                if (icon) icon.textContent = '⏸';
+            } else {
+                currentWordAudio.pause();
+                const icon = buttonElement.querySelector('.word-play-icon');
+                if (icon) icon.textContent = '▶';
+            }
+            return;
+        }
+        
+        // Останавливаем предыдущее аудио
+        if (currentWordAudio) {
+            currentWordAudio.pause();
+            currentWordAudio = null;
+            if (currentWordButton) {
+                const icon = currentWordButton.querySelector('.word-play-icon');
+                if (icon) icon.textContent = '▶';
+                const time = currentWordButton.querySelector('.word-audio-time');
+                if (time) time.textContent = '';
+            }
+        }
         
         // Проверяем, есть ли сохраненное аудио
         if (word.audio_path) {
             try {
                 const audioUrl = '{{ url("/storage") }}/' + word.audio_path;
-                const audio = new Audio(audioUrl);
-                await audio.play();
+                currentWordAudio = new Audio(audioUrl);
+                currentWordButton = buttonElement;
+                
+                // Обновляем иконку
+                const icon = buttonElement.querySelector('.word-play-icon');
+                if (icon) icon.textContent = '⏸';
+                
+                // Обработчики событий
+                currentWordAudio.addEventListener('timeupdate', () => {
+                    if (currentWordAudio && buttonElement) {
+                        const current = currentWordAudio.currentTime || 0;
+                        const duration = currentWordAudio.duration || 0;
+                        const timeEl = buttonElement.querySelector('.word-audio-time');
+                        if (timeEl && duration > 0) {
+                            timeEl.textContent = formatTime(current);
+                        }
+                    }
+                });
+                
+                currentWordAudio.addEventListener('ended', () => {
+                    if (buttonElement) {
+                        const icon = buttonElement.querySelector('.word-play-icon');
+                        if (icon) icon.textContent = '▶';
+                        const time = buttonElement.querySelector('.word-audio-time');
+                        if (time) time.textContent = '';
+                    }
+                    currentWordAudio = null;
+                    currentWordButton = null;
+                });
+                
+                currentWordAudio.addEventListener('pause', () => {
+                    if (buttonElement) {
+                        const icon = buttonElement.querySelector('.word-play-icon');
+                        if (icon) icon.textContent = '▶';
+                    }
+                });
+                
+                await currentWordAudio.play();
                 return;
             } catch (error) {
                 console.error('Ошибка воспроизведения аудио:', error);
@@ -1376,12 +1539,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Обработка кнопок озвучки слов (делегирование событий)
     document.addEventListener('click', async function(e) {
-        if (e.target.classList.contains('speak-word-btn')) {
+        const btn = e.target.closest('.speak-word-btn');
+        if (btn) {
             e.preventDefault();
             e.stopPropagation();
-            const wordId = parseInt(e.target.dataset.wordId);
-            const wordText = e.target.dataset.wordText;
-            await speakWord(wordId, wordText);
+            const wordId = parseInt(btn.dataset.wordId);
+            const wordText = btn.dataset.wordText;
+            await speakWord(wordId, wordText, btn);
         }
     });
     

@@ -179,7 +179,10 @@ class StudyController extends Controller
         ]);
 
         // Обновляем прогресс только если слово еще не изучено
-        $progress = WordStudyProgress::findOrFail($validated['progress_id']);
+        // Проверяем, что progress_id принадлежит текущему пользователю
+        $progress = WordStudyProgress::where('id', $validated['progress_id'])
+            ->where('user_id', $user->id)
+            ->firstOrFail();
         
         if (!$progress->is_completed) {
             // Проверяем, выполнены ли оба повторения за сегодня
