@@ -8,11 +8,6 @@ use Illuminate\Http\Request;
 
 class AdminDictionaryController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware(['auth', 'admin']);
-    }
-
     public function index(Request $request)
     {
         $query = GlobalDictionary::query();

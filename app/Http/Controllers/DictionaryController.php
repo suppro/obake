@@ -8,11 +8,6 @@ use Illuminate\Support\Facades\Auth;
 
 class DictionaryController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware('auth');
-    }
-
     public function index()
     {
         $user = Auth::user();
@@ -30,7 +25,9 @@ class DictionaryController extends Controller
         $user = Auth::user();
         
         // Проверяем, что слово еще не добавлено
-        if (!$user->dictionary()->where('word_id', $validated['word_id'])->exists()) {
+        $wordExists = $user->dictionary()->get()->pluck('id')->contains($validated['word_id']);
+        
+        if (!$wordExists) {
             $user->dictionary()->attach($validated['word_id']);
         }
 

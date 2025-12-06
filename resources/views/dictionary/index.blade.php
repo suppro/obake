@@ -4,7 +4,7 @@
 
 @section('content')
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <h1 class="text-4xl font-bold mb-8 text-red-400">📖 Мой словарь</h1>
+    <h1 class="text-4xl font-bold mb-8 text-purple-400">📖 Мой словарь</h1>
     
     @if($words->count() > 0)
         <div class="bg-gray-800 rounded-lg shadow-lg p-6">
@@ -24,7 +24,7 @@
                         <form method="POST" action="{{ route('dictionary.remove', $word->id) }}" class="inline">
                             @csrf
                             @method('DELETE')
-                            <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition">
+                            <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition">
                                 Удалить
                             </button>
                         </form>
@@ -40,7 +40,7 @@
         <div class="bg-gray-800 rounded-lg shadow-lg p-8 text-center">
             <p class="text-xl text-gray-400 mb-4">Ваш словарь пуст</p>
             <p class="text-gray-500">Начните читать рассказы и добавляйте слова в свой словарь!</p>
-            <a href="{{ route('stories.index') }}" class="inline-block mt-4 bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition">
+            <a href="{{ route('stories.index') }}" class="inline-block mt-4 bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg transition">
                 Перейти к рассказам
             </a>
         </div>

@@ -27,4 +27,14 @@ class Story extends Model
         return $this->belongsToMany(GlobalDictionary::class, 'story_words', 'story_id', 'word_id')
             ->withTimestamps();
     }
+
+    /**
+     * Пользователи, которые прочитали этот рассказ
+     */
+    public function readers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'read_stories', 'story_id', 'user_id')
+            ->withPivot('read_at')
+            ->withTimestamps();
+    }
 }

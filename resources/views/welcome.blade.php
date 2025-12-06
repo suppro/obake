@@ -19,18 +19,18 @@
         }
             </style>
     </head>
-<body class="bg-gradient-to-br from-gray-900 via-red-900 to-gray-900 text-gray-100 min-h-screen">
+<body class="bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-gray-100 min-h-screen">
     <div class="container mx-auto px-4 py-16">
         <div class="max-w-4xl mx-auto text-center">
             <h1 class="text-6xl font-bold mb-4 japanese-font">
-                <span class="text-red-400">👹</span> Obake
+                <span class="text-purple-400">👻</span> Obake
             </h1>
             <p class="text-2xl mb-8 text-gray-300">
                 お化け - Изучение японского языка
             </p>
             
             <div class="bg-gray-800 bg-opacity-80 backdrop-blur-sm rounded-lg p-8 mb-8 shadow-2xl">
-                <h2 class="text-3xl font-bold mb-4 text-red-400">Добро пожаловать в Obake!</h2>
+                <h2 class="text-3xl font-bold mb-4 text-purple-400">Добро пожаловать в Obake!</h2>
                 <p class="text-lg mb-4 text-gray-300">
                     Obake — это платформа для изучения японского языка через чтение рассказов и изучение новых слов.
                 </p>
@@ -40,11 +40,11 @@
                 
                 <div class="flex justify-center space-x-4">
                     @auth
-                        <a href="{{ route('dashboard') }}" class="bg-red-600 hover:bg-red-700 text-white px-8 py-3 rounded-lg font-semibold transition">
+                        <a href="{{ route('dashboard') }}" class="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-lg font-semibold transition">
                             Перейти в приложение
                         </a>
                     @else
-                        <a href="{{ route('register') }}" class="bg-red-600 hover:bg-red-700 text-white px-8 py-3 rounded-lg font-semibold transition">
+                        <a href="{{ route('register') }}" class="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-lg font-semibold transition">
                             Зарегистрироваться
                         </a>
                         <a href="{{ route('login') }}" class="bg-gray-700 hover:bg-gray-600 text-white px-8 py-3 rounded-lg font-semibold transition">

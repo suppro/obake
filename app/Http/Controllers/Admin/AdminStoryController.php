@@ -8,11 +8,6 @@ use Illuminate\Http\Request;
 
 class AdminStoryController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware(['auth', 'admin']);
-    }
-
     public function index()
     {
         $stories = Story::orderBy('level')->orderBy('created_at', 'desc')->paginate(20);

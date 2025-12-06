@@ -59,6 +59,16 @@ class User extends Authenticatable
     }
 
     /**
+     * Прочитанные рассказы пользователя
+     */
+    public function readStories(): BelongsToMany
+    {
+        return $this->belongsToMany(Story::class, 'read_stories', 'user_id', 'story_id')
+            ->withPivot('read_at')
+            ->withTimestamps();
+    }
+
+    /**
      * Проверка, является ли пользователь администратором
      */
     public function isAdmin(): bool

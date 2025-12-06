@@ -29,7 +29,7 @@
                             <td class="px-6 py-4 whitespace-nowrap text-gray-300">{{ $story->id }}</td>
                             <td class="px-6 py-4 text-gray-300">{{ $story->title }}</td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="bg-red-600 text-white px-2 py-1 rounded text-sm">{{ $story->level }}</span>
+                                <span class="bg-purple-600 text-white px-2 py-1 rounded text-sm">{{ $story->level }}</span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 @if($story->is_active)

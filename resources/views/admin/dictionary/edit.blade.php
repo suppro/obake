@@ -21,9 +21,13 @@
             </div>
             
             <div class="mb-4">
-                <label for="reading" class="block text-gray-300 mb-2">Чтение (фуригана)</label>
-                <input type="text" id="reading" name="reading" value="{{ old('reading', $word->reading) }}"
+                <label for="reading" class="block text-gray-300 mb-2">
+                    Чтение (фуригана) 
+                    <span class="text-yellow-400 text-sm">*рекомендуется</span>
+                </label>
+                <input type="text" id="reading" name="reading" value="{{ old('reading', $word->reading) }}" placeholder="例: よむ (для 読む)"
                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">
+                <p class="text-gray-400 text-sm mt-1">Необходимо для отображения фуриганы над словами в рассказах</p>
                 @error('reading')
                     <p class="text-red-400 text-sm mt-1">{{ $message }}</p>
                 @enderror
@@ -48,9 +52,22 @@
             </div>
             
             <div class="mb-4">
-                <label for="word_type" class="block text-gray-300 mb-2">Тип слова (опционально)</label>
-                <input type="text" id="word_type" name="word_type" value="{{ old('word_type', $word->word_type) }}"
+                <label for="word_type" class="block text-gray-300 mb-2">
+                    Тип слова 
+                    <span class="text-yellow-400 text-sm">*для спряжений</span>
+                </label>
+                <select id="word_type" name="word_type" 
                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">
+                    <option value="">-- Выберите тип (опционально) --</option>
+                    <option value="Глагол" {{ old('word_type', $word->word_type) == 'Глагол' ? 'selected' : '' }}>Глагол</option>
+                    <option value="い-прилагательное" {{ old('word_type', $word->word_type) == 'い-прилагательное' ? 'selected' : '' }}>い-прилагательное (например: 楽しい, 可愛い)</option>
+                    <option value="な-прилагательное" {{ old('word_type', $word->word_type) == 'な-прилагательное' ? 'selected' : '' }}>な-прилагательное (например: 好き, きれい)</option>
+                    <option value="Существительное" {{ old('word_type', $word->word_type) == 'Существительное' ? 'selected' : '' }}>Существительное</option>
+                    <option value="Другое" {{ old('word_type', $word->word_type) == 'Другое' ? 'selected' : '' }}>Другое</option>
+                </select>
+                <p class="text-gray-400 text-sm mt-1">
+                    Для глаголов и прилагательных система автоматически определит все спряженные формы (読む → 読みました, 楽しい → 楽しかった и т.д.)
+                </p>
                 @error('word_type')
                     <p class="text-red-400 text-sm mt-1">{{ $message }}</p>
                 @enderror

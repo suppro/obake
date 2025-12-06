@@ -22,8 +22,8 @@
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex justify-between h-16">
                     <div class="flex items-center">
-                        <a href="{{ route('dashboard') }}" class="flex items-center space-x-2 text-2xl font-bold text-red-400 hover:text-red-300 transition">
-                            <span>👹</span>
+                        <a href="{{ route('dashboard') }}" class="flex items-center space-x-2 text-2xl font-bold text-purple-400 hover:text-purple-300 transition">
+                            <span>👻</span>
                             <span>Obake</span>
                         </a>
                     </div>
@@ -44,7 +44,7 @@
                             </form>
                         @else
                             <a href="{{ route('login') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Вход</a>
-                            <a href="{{ route('register') }}" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition">Регистрация</a>
+                            <a href="{{ route('register') }}" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition">Регистрация</a>
                         @endauth
                     </div>
                 </div>
@@ -63,7 +63,7 @@
 
             @if(session('error'))
                 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
-                    <div class="bg-red-600 text-white px-4 py-3 rounded-lg">
+                    <div class="bg-purple-600 text-white px-4 py-3 rounded-lg">
                         {{ session('error') }}
                     </div>
                 </div>

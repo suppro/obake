@@ -35,6 +35,7 @@ Route::middleware('auth')->group(function () {
     // Рассказы
     Route::get('/stories', [StoryController::class, 'index'])->name('stories.index');
     Route::get('/stories/{id}', [StoryController::class, 'show'])->name('stories.show');
+    Route::post('/stories/{id}/mark-as-read', [StoryController::class, 'markAsRead'])->name('stories.mark-as-read');
 });
 
 // Админ панель
