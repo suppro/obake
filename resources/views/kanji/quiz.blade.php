@@ -6,7 +6,14 @@
 <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="mb-8 text-center">
         <h1 class="text-4xl font-bold text-purple-400 mb-2">🎯 Квиз по кандзи</h1>
-        <p class="text-gray-400">Повторите {{ $count }} кандзи</p>
+        <p class="text-gray-400">
+            Повторите {{ $count }} кандзи
+            @if($jlptLevel !== 'any')
+                ({{ $jlptLevel === '5' ? 'N5' : ($jlptLevel === '4' ? 'N4' : ($jlptLevel === '3' ? 'N3' : ($jlptLevel === '2' ? 'N2' : 'N1'))) }})
+            @else
+                (любой уровень)
+            @endif
+        </p>
     </div>
 
     <!-- Прогресс -->
@@ -106,7 +113,7 @@ document.addEventListener('DOMContentLoaded', function() {
         answersContainer.innerHTML = '';
         answersContainer.classList.remove('hidden');
         
-        fetch(`{{ route('kanji.get-question') }}?count=${totalCount}`, {
+        fetch(`{{ route('kanji.get-question') }}?count=${totalCount}&jlpt_level={{ $jlptLevel }}`, {
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',

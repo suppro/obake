@@ -26,11 +26,26 @@
     </div>
 
     <!-- Кнопка начала квиза -->
-    <div class="mb-8">
-        <form action="{{ route('kanji.quiz') }}" method="GET" class="flex items-center gap-4">
-            <label class="text-gray-300">Количество кандзи для повторения:</label>
-            <input type="number" name="count" value="10" min="1" max="50" 
-                   class="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white w-24 focus:outline-none focus:ring-2 focus:ring-purple-500">
+    <div class="mb-8 bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+        <h3 class="text-xl font-bold text-purple-400 mb-4">Начать квиз</h3>
+        <form action="{{ route('kanji.quiz') }}" method="GET" class="flex flex-wrap items-center gap-4">
+            <div class="flex items-center gap-2">
+                <label class="text-gray-300">Количество:</label>
+                <input type="number" name="count" value="10" min="1" max="50" 
+                       class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white w-24 focus:outline-none focus:ring-2 focus:ring-purple-500">
+            </div>
+            <div class="flex items-center gap-2">
+                <label class="text-gray-300">Уровень JLPT:</label>
+                <select name="jlpt_level" 
+                       class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <option value="any">Любой</option>
+                    <option value="5">N5 (Начальный)</option>
+                    <option value="4">N4 (Базовый)</option>
+                    <option value="3">N3 (Средний)</option>
+                    <option value="2">N2 (Выше среднего)</option>
+                    <option value="1">N1 (Продвинутый)</option>
+                </select>
+            </div>
             <button type="submit" 
                     class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-3 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50 transform hover:scale-105">
                 Начать квиз 🎯
@@ -38,35 +53,45 @@
         </form>
     </div>
 
-    <!-- Список кандзи -->
-    <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
-        <h2 class="text-2xl font-bold text-purple-400 mb-4">Список кандзи</h2>
-        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            @foreach($kanjiWithProgress as $item)
-                <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hover:border-purple-500 transition-all hover:shadow-lg hover:shadow-purple-500/20">
-                    <div class="text-center mb-2">
-                        <div class="text-4xl font-bold text-white mb-1">{{ $item['kanji'] }}</div>
-                        <div class="text-sm text-gray-400">{{ $item['translation'] }}</div>
-                    </div>
-                    <div class="mt-3">
-                        <div class="flex items-center justify-between mb-1">
-                            <span class="text-xs text-gray-400">Уровень:</span>
-                            <span class="text-sm font-semibold text-purple-300">{{ $item['level'] }}/10</span>
-                        </div>
-                        <div class="w-full bg-gray-600 rounded-full h-2">
-                            <div class="bg-gradient-to-r from-purple-500 to-indigo-500 h-2 rounded-full transition-all" 
-                                 style="width: {{ ($item['level'] / 10) * 100 }}%"></div>
-                        </div>
-                        @if($item['last_reviewed_at'])
-                            <div class="text-xs text-gray-500 mt-2">
-                                Последний раз: {{ $item['last_reviewed_at']->format('d.m.Y') }}
+    <!-- Список кандзи по уровням JLPT -->
+    <div class="space-y-8">
+        @foreach($kanjiByLevel as $level => $kanjiList)
+            <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+                <h2 class="text-2xl font-bold text-purple-400 mb-4 flex items-center gap-2">
+                    @if($level === 'Без уровня')
+                        📋 {{ $level }}
+                    @else
+                        🎓 {{ $level }}
+                    @endif
+                    <span class="text-sm font-normal text-gray-400">({{ $kanjiList->count() }} кандзи)</span>
+                </h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                    @foreach($kanjiList as $item)
+                        <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hover:border-purple-500 transition-all hover:shadow-lg hover:shadow-purple-500/20">
+                            <div class="text-center mb-2">
+                                <div class="text-4xl font-bold text-white mb-1">{{ $item['kanji'] }}</div>
+                                <div class="text-sm text-gray-400">{{ $item['translation'] }}</div>
                             </div>
-                        @endif
-                    </div>
+                            <div class="mt-3">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-xs text-gray-400">Уровень:</span>
+                                    <span class="text-sm font-semibold text-purple-300">{{ $item['level'] }}/10</span>
+                                </div>
+                                <div class="w-full bg-gray-600 rounded-full h-2">
+                                    <div class="bg-gradient-to-r from-purple-500 to-indigo-500 h-2 rounded-full transition-all" 
+                                         style="width: {{ ($item['level'] / 10) * 100 }}%"></div>
+                                </div>
+                                @if($item['last_reviewed_at'])
+                                    <div class="text-xs text-gray-500 mt-2">
+                                        Последний раз: {{ $item['last_reviewed_at']->format('d.m.Y') }}
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    @endforeach
                 </div>
-            @endforeach
-        </div>
+            </div>
+        @endforeach
     </div>
 </div>
 @endsection
-

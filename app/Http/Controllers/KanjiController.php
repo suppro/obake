@@ -2,14 +2,36 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Kanji;
 use App\Models\KanjiStudyProgress;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class KanjiController extends Controller
 {
-    // Базовый список кандзи для изучения
-    private const KANJI_LIST = [
+    /**
+     * Получить список всех активных кандзи
+     */
+    private function getAllKanji($jlptLevel = null)
+    {
+        $query = Kanji::where('is_active', true);
+        
+        if ($jlptLevel && $jlptLevel !== 'any') {
+            $query->where('jlpt_level', $jlptLevel);
+        }
+        
+        return $query->get()
+            ->map(function ($kanji) {
+                return [
+                    'kanji' => $kanji->kanji,
+                    'translation' => $kanji->translation_ru,
+                    'jlpt_level' => $kanji->jlpt_level,
+                ];
+            });
+    }
+    
+    // Базовый список кандзи для изучения (fallback, если в БД нет данных)
+    private const KANJI_LIST_FALLBACK = [
         ['kanji' => '今', 'translation' => 'сейчас'],
         ['kanji' => '本', 'translation' => 'книга'],
         ['kanji' => '日', 'translation' => 'день'],
@@ -71,27 +93,33 @@ class KanjiController extends Controller
         $user = Auth::user();
         
         // Получаем все кандзи с прогрессом пользователя
-        $allKanji = collect(self::KANJI_LIST);
+        $allKanji = Kanji::where('is_active', true)->get();
         $userProgress = KanjiStudyProgress::where('user_id', $user->id)
             ->get()
             ->keyBy('kanji');
         
-        $kanjiWithProgress = $allKanji->map(function ($kanji) use ($userProgress) {
-            $progress = $userProgress->get($kanji['kanji']);
-            return [
-                'kanji' => $kanji['kanji'],
-                'translation' => $kanji['translation'],
-                'level' => $progress ? $progress->level : 0,
-                'last_reviewed_at' => $progress ? $progress->last_reviewed_at : null,
-            ];
-        })->sortBy('level')->values();
+        // Группируем кандзи по уровням JLPT
+        $kanjiByLevel = $allKanji->groupBy(function ($kanji) {
+            return $kanji->jlpt_level ? "N{$kanji->jlpt_level}" : 'Без уровня';
+        })->map(function ($kanjiGroup, $level) use ($userProgress) {
+            return $kanjiGroup->map(function ($kanji) use ($userProgress) {
+                $progress = $userProgress->get($kanji->kanji);
+                return [
+                    'kanji' => $kanji->kanji,
+                    'translation' => $kanji->translation_ru,
+                    'jlpt_level' => $kanji->jlpt_level,
+                    'level' => $progress ? $progress->level : 0,
+                    'last_reviewed_at' => $progress ? $progress->last_reviewed_at : null,
+                ];
+            })->sortBy('level')->values();
+        })->sortKeys();
         
         // Статистика
         $totalKanji = $allKanji->count();
         $studiedKanji = $userProgress->count();
         $completedKanji = $userProgress->where('level', '>=', 10)->count();
         
-        return view('kanji.index', compact('kanjiWithProgress', 'totalKanji', 'studiedKanji', 'completedKanji'));
+        return view('kanji.index', compact('kanjiByLevel', 'totalKanji', 'studiedKanji', 'completedKanji'));
     }
 
     /**
@@ -101,8 +129,9 @@ class KanjiController extends Controller
     {
         $count = (int) $request->get('count', 10);
         $count = max(1, min(50, $count)); // Ограничиваем от 1 до 50
+        $jlptLevel = $request->get('jlpt_level', 'any'); // any, 5, 4, 3, 2, 1
         
-        return view('kanji.quiz', compact('count'));
+        return view('kanji.quiz', compact('count', 'jlptLevel'));
     }
 
     /**
@@ -112,8 +141,12 @@ class KanjiController extends Controller
     {
         $user = Auth::user();
         $count = (int) $request->get('count', 10);
+        $jlptLevel = $request->get('jlpt_level', 'any');
         
-        $allKanji = collect(self::KANJI_LIST);
+        $allKanji = $this->getAllKanji($jlptLevel);
+        if ($allKanji->isEmpty()) {
+            $allKanji = collect(self::KANJI_LIST_FALLBACK);
+        }
         
         // Получаем все кандзи с прогрессом пользователя
         $userProgress = KanjiStudyProgress::where('user_id', $user->id)
@@ -205,10 +238,20 @@ class KanjiController extends Controller
         $answer = $request->answer;
         $correctAnswer = $request->correct_answer;
         
-        // Находим кандзи в списке
-        $kanjiData = collect(self::KANJI_LIST)->firstWhere('kanji', $kanji);
-        if (!$kanjiData) {
-            return response()->json(['error' => 'Кандзи не найден'], 404);
+        // Находим кандзи в БД или в fallback списке
+        $kanjiModel = Kanji::where('kanji', $kanji)->where('is_active', true)->first();
+        if (!$kanjiModel) {
+            $allKanji = $this->getAllKanji();
+            if ($allKanji->isEmpty()) {
+                $allKanji = collect(self::KANJI_LIST_FALLBACK);
+            }
+            $kanjiData = $allKanji->firstWhere('kanji', $kanji);
+            if (!$kanjiData) {
+                return response()->json(['error' => 'Кандзи не найден'], 404);
+            }
+            $translation = $kanjiData['translation'];
+        } else {
+            $translation = $kanjiModel->translation_ru;
         }
         
         // Получаем или создаем прогресс
@@ -218,7 +261,7 @@ class KanjiController extends Controller
                 'kanji' => $kanji,
             ],
             [
-                'translation_ru' => $kanjiData['translation'],
+                'translation_ru' => $translation,
                 'level' => 0,
             ]
         );

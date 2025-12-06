@@ -70,4 +70,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     
     // CRUD для словаря
     Route::resource('dictionary', AdminDictionaryController::class);
+    
+    // CRUD для кандзи
+    Route::resource('kanji', \App\Http\Controllers\Admin\AdminKanjiController::class);
 });
