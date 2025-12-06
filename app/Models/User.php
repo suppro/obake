@@ -85,6 +85,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Прогресс изучения кандзи
+     */
+    public function kanjiStudyProgress()
+    {
+        return $this->hasMany(\App\Models\KanjiStudyProgress::class);
+    }
+
+    /**
      * Проверка, является ли пользователь администратором
      */
     public function isAdmin(): bool

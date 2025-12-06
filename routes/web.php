@@ -6,6 +6,7 @@ use App\Http\Controllers\DictionaryController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\StoryController;
 use App\Http\Controllers\StudyController;
+use App\Http\Controllers\KanjiController;
 use App\Http\Controllers\AudioController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminDictionaryController;
@@ -52,6 +53,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/study/get-next-word', [StudyController::class, 'getNextWord'])->name('study.get-next-word');
     Route::post('/study/check-answer', [StudyController::class, 'checkAnswer'])->name('study.check-answer');
     Route::get('/study/get-extra-words', [StudyController::class, 'getExtraWords'])->name('study.get-extra-words');
+    
+    // Изучение кандзи
+    Route::get('/kanji', [KanjiController::class, 'index'])->name('kanji.index');
+    Route::get('/kanji/quiz', [KanjiController::class, 'quiz'])->name('kanji.quiz');
+    Route::get('/kanji/get-question', [KanjiController::class, 'getQuestion'])->name('kanji.get-question');
+    Route::post('/kanji/submit-answer', [KanjiController::class, 'submitAnswer'])->name('kanji.submit-answer');
 });
 
 // Админ панель

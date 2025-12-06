@@ -65,20 +65,29 @@
         </div>
         
         <!-- Аудио проигрыватель для рассказа (под текстом) -->
-        <div id="story-audio-player" class="hidden mt-6 mb-4 bg-gray-700 rounded-xl p-4 shadow-lg border border-gray-600">
-            <div class="flex items-center gap-4">
-                <button id="audio-play-pause-btn" class="bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white w-14 h-14 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow-lg hover:shadow-purple-500/50" title="Воспроизвести/Пауза">
-                    <span id="audio-play-icon" class="text-xl">▶</span>
+        <div id="story-audio-player" class="hidden mt-8 mb-6 bg-gradient-to-br from-gray-800 via-gray-800 to-gray-900 rounded-2xl p-5 shadow-2xl border border-gray-700/50 backdrop-blur-sm">
+            <div class="flex items-center gap-5">
+                <!-- Кнопка Play/Pause -->
+                <button id="audio-play-pause-btn" class="group relative bg-gradient-to-br from-purple-600 via-purple-600 to-indigo-600 hover:from-purple-500 hover:via-purple-500 hover:to-indigo-500 active:from-purple-700 active:via-purple-700 active:to-indigo-700 text-white w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 flex-shrink-0 shadow-lg hover:shadow-purple-500/50 hover:scale-105 active:scale-95" title="Воспроизвести/Пауза">
+                    <span id="audio-play-icon" class="text-2xl ml-0.5 transition-transform duration-200 group-hover:scale-110">▶</span>
+                    <div class="absolute inset-0 rounded-2xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                 </button>
+                
+                <!-- Прогресс-бар и время -->
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-4">
-                        <input type="range" id="audio-progress" min="0" max="100" value="0" 
-                               class="flex-1 h-2 bg-gray-600 rounded-full appearance-none cursor-pointer audio-slider hover:h-2.5 transition-all">
-                        <span id="audio-time" class="text-gray-300 text-sm font-mono whitespace-nowrap min-w-[110px] text-right">0:00 / 0:00</span>
+                        <div class="flex-1 relative group">
+                            <input type="range" id="audio-progress" min="0" max="100" value="0" 
+                                   class="w-full h-2.5 bg-gray-700/60 rounded-full appearance-none cursor-pointer audio-slider hover:h-3 transition-all duration-200 outline-none focus:outline-none focus:ring-2 focus:ring-purple-500/50">
+                            <div id="audio-progress-buffer" class="absolute top-0 left-0 h-2.5 bg-gray-600/40 rounded-full pointer-events-none transition-all duration-200" style="width: 0%"></div>
+                        </div>
+                        <span id="audio-time" class="text-gray-200 text-sm font-mono whitespace-nowrap min-w-[120px] text-right font-medium tracking-wide">0:00 / 0:00</span>
                     </div>
                 </div>
-                <button id="audio-stop-btn" class="bg-gray-600 hover:bg-gray-500 active:bg-gray-400 text-white w-11 h-11 rounded-lg flex items-center justify-center transition-all flex-shrink-0 shadow-md" title="Остановить">
-                    <span class="text-lg">⏹</span>
+                
+                <!-- Кнопка Stop -->
+                <button id="audio-stop-btn" class="group bg-gray-700/80 hover:bg-gray-600 active:bg-gray-500 text-gray-200 hover:text-white w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 flex-shrink-0 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 border border-gray-600/50 hover:border-gray-500" title="Остановить">
+                    <span class="text-xl transition-transform duration-200 group-hover:scale-110">⏹</span>
                 </button>
             </div>
         </div>
@@ -165,49 +174,135 @@
         }
     }
     
-    /* Стили для аудио слайдера */
-    .audio-slider::-webkit-slider-thumb {
+    /* Улучшенные стили для аудио слайдера */
+    .audio-slider {
+        -webkit-appearance: none;
         appearance: none;
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: #9333ea;
+        background: transparent;
         cursor: pointer;
+        outline: none;
+        position: relative;
     }
+    
+    .audio-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #a855f7, #6366f1);
+        cursor: pointer;
+        border: 3px solid #ffffff;
+        box-shadow: 0 2px 8px rgba(168, 85, 247, 0.5), 0 0 0 0 rgba(168, 85, 247, 0.4);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        z-index: 2;
+    }
+    
+    .audio-slider::-webkit-slider-thumb:hover {
+        transform: scale(1.3);
+        box-shadow: 0 4px 12px rgba(168, 85, 247, 0.7), 0 0 0 4px rgba(168, 85, 247, 0.2);
+        background: linear-gradient(135deg, #9333ea, #4f46e5);
+    }
+    
+    .audio-slider::-webkit-slider-thumb:active {
+        transform: scale(1.15);
+        box-shadow: 0 2px 8px rgba(168, 85, 247, 0.6), 0 0 0 2px rgba(168, 85, 247, 0.3);
+    }
+    
     .audio-slider::-moz-range-thumb {
-        width: 14px;
-        height: 14px;
+        width: 18px;
+        height: 18px;
         border-radius: 50%;
-        background: #9333ea;
+        background: linear-gradient(135deg, #a855f7, #6366f1);
         cursor: pointer;
-        border: none;
+        border: 3px solid #ffffff;
+        box-shadow: 0 2px 8px rgba(168, 85, 247, 0.5);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
+    
+    .audio-slider::-moz-range-thumb:hover {
+        transform: scale(1.3);
+        box-shadow: 0 4px 12px rgba(168, 85, 247, 0.7);
+        background: linear-gradient(135deg, #9333ea, #4f46e5);
+    }
+    
     .audio-slider::-webkit-slider-runnable-track {
-        background: #4b5563;
-        height: 6px;
-        border-radius: 3px;
+        background: linear-gradient(to right, #a855f7 0%, #6366f1 100%);
+        height: 10px;
+        border-radius: 5px;
+        position: relative;
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
     }
+    
     .audio-slider::-moz-range-track {
-        background: #4b5563;
-        height: 6px;
-        border-radius: 3px;
+        background: linear-gradient(to right, #a855f7 0%, #6366f1 100%);
+        height: 10px;
+        border-radius: 5px;
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
     }
     
     /* Стили для проигрывателя */
     #story-audio-player {
         display: block;
+        animation: fadeInUp 0.4s ease-out;
     }
+    
     #story-audio-player.hidden {
         display: none;
     }
     
-    /* Улучшенные стили для слайдера */
-    .audio-slider:hover {
-        height: 8px;
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
     
-    .audio-slider:active {
-        height: 8px;
+    /* Анимация для кнопки play/pause */
+    #audio-play-pause-btn {
+        position: relative;
+        overflow: hidden;
+    }
+    
+    #audio-play-pause-btn::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.3);
+        transform: translate(-50%, -50%);
+        transition: width 0.6s, height 0.6s;
+    }
+    
+    #audio-play-pause-btn:active::before {
+        width: 200px;
+        height: 200px;
+    }
+    
+    /* Улучшенные стили для слайдера при наведении */
+    .audio-slider:hover {
+        height: 12px;
+    }
+    
+    .audio-slider:hover::-webkit-slider-runnable-track {
+        height: 12px;
+    }
+    
+    .audio-slider:hover::-moz-range-track {
+        height: 12px;
+    }
+    
+    /* Стили для буфера прогресса */
+    #audio-progress-buffer {
+        transition: width 0.1s linear;
     }
 </style>
 @endpush
@@ -1469,6 +1564,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (audioProgress && !isDraggingProgress) {
                     const progress = duration > 0 ? (current / duration) * 100 : 0;
                     audioProgress.value = progress;
+                }
+                
+                // Обновляем буфер прогресса
+                const audioProgressBuffer = document.getElementById('audio-progress-buffer');
+                if (audioProgressBuffer && currentAudio.buffered && currentAudio.buffered.length > 0) {
+                    const bufferedEnd = currentAudio.buffered.end(currentAudio.buffered.length - 1);
+                    const bufferedPercent = duration > 0 ? (bufferedEnd / duration) * 100 : 0;
+                    audioProgressBuffer.style.width = bufferedPercent + '%';
+                } else if (audioProgressBuffer) {
+                    audioProgressBuffer.style.width = '0%';
                 }
                 
                 if (audioPlayIcon) {

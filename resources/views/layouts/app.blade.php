@@ -34,6 +34,7 @@
                             <a href="{{ route('stories.index') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Рассказы</a>
                             <a href="{{ route('dictionary.index') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Мой словарь</a>
                             <a href="{{ route('study.index') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Изучение</a>
+                            <a href="{{ route('kanji.index') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Кандзи</a>
                             
                             @if(auth()->user()->isAdmin())
                                 <a href="{{ route('admin.dashboard') }}" class="px-4 py-2 text-purple-400 hover:text-purple-300 transition">Админ</a>
