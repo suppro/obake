@@ -25,22 +25,10 @@
                     <input type="checkbox" id="furigana-toggle" class="rounded bg-gray-700 border-gray-600 text-purple-600">
                     <span class="ml-2 text-gray-300">Фуригана</span>
                 </label>
-                <!-- Аудио проигрыватель для рассказа -->
-                <div id="story-audio-player" class="bg-gray-700 rounded-lg p-3 flex items-center gap-3 min-w-[300px]">
-                    <button id="audio-play-pause-btn" class="bg-purple-600 hover:bg-purple-700 text-white w-10 h-10 rounded-full flex items-center justify-center transition flex-shrink-0" title="Озвучить рассказ">
-                        <span id="audio-play-icon">▶</span>
-                    </button>
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2">
-                            <input type="range" id="audio-progress" min="0" max="100" value="0" 
-                                   class="flex-1 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer audio-slider">
-                            <span id="audio-time" class="text-gray-300 text-xs whitespace-nowrap">0:00 / 0:00</span>
-                        </div>
-                    </div>
-                    <button id="audio-stop-btn" class="bg-gray-600 hover:bg-gray-500 text-white w-8 h-8 rounded flex items-center justify-center transition flex-shrink-0 text-sm" title="Остановить">
-                        ⏹
-                    </button>
-                </div>
+                <button id="speak-story-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition text-sm flex items-center">
+                    <span id="speak-story-icon">🔊</span>
+                    <span id="speak-story-text" class="ml-2">Озвучить</span>
+                </button>
                 @if(!$isRead)
                     <button id="mark-as-read-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition text-sm">
                         ✓ Отметить как прочитанное
@@ -74,6 +62,25 @@
              })) }}"
              data-user-words="{{ json_encode($userWordIds) }}"
              data-word-progress="{{ json_encode($wordProgress) }}">
+        </div>
+        
+        <!-- Аудио проигрыватель для рассказа (под текстом) -->
+        <div id="story-audio-player" class="hidden mt-6 mb-4 bg-gray-700 rounded-xl p-4 shadow-lg border border-gray-600">
+            <div class="flex items-center gap-4">
+                <button id="audio-play-pause-btn" class="bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white w-14 h-14 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow-lg hover:shadow-purple-500/50" title="Воспроизвести/Пауза">
+                    <span id="audio-play-icon" class="text-xl">▶</span>
+                </button>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-4">
+                        <input type="range" id="audio-progress" min="0" max="100" value="0" 
+                               class="flex-1 h-2 bg-gray-600 rounded-full appearance-none cursor-pointer audio-slider hover:h-2.5 transition-all">
+                        <span id="audio-time" class="text-gray-300 text-sm font-mono whitespace-nowrap min-w-[110px] text-right">0:00 / 0:00</span>
+                    </div>
+                </div>
+                <button id="audio-stop-btn" class="bg-gray-600 hover:bg-gray-500 active:bg-gray-400 text-white w-11 h-11 rounded-lg flex items-center justify-center transition-all flex-shrink-0 shadow-md" title="Остановить">
+                    <span class="text-lg">⏹</span>
+                </button>
+            </div>
         </div>
         
         <div id="word-tooltip" class="fixed bg-gray-900 border border-gray-700 rounded-lg p-4 shadow-xl z-50 hidden">
@@ -156,6 +163,51 @@
         50% {
             opacity: 0.7;
         }
+    }
+    
+    /* Стили для аудио слайдера */
+    .audio-slider::-webkit-slider-thumb {
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #9333ea;
+        cursor: pointer;
+    }
+    .audio-slider::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #9333ea;
+        cursor: pointer;
+        border: none;
+    }
+    .audio-slider::-webkit-slider-runnable-track {
+        background: #4b5563;
+        height: 6px;
+        border-radius: 3px;
+    }
+    .audio-slider::-moz-range-track {
+        background: #4b5563;
+        height: 6px;
+        border-radius: 3px;
+    }
+    
+    /* Стили для проигрывателя */
+    #story-audio-player {
+        display: block;
+    }
+    #story-audio-player.hidden {
+        display: none;
+    }
+    
+    /* Улучшенные стили для слайдера */
+    .audio-slider:hover {
+        height: 8px;
+    }
+    
+    .audio-slider:active {
+        height: 8px;
     }
 </style>
 @endpush
@@ -1168,7 +1220,40 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentAudio = new Audio(audioUrl);
                 
                 // Настраиваем обработчики событий
-                setupAudioEventListeners(currentAudio);
+                currentAudio.addEventListener('loadedmetadata', () => {
+                    if (!isDraggingProgress) updateAudioPlayer();
+                });
+                currentAudio.addEventListener('timeupdate', () => {
+                    // Не обновляем во время перетаскивания, чтобы не сбрасывать позицию
+                    if (!isDraggingProgress) {
+                        updateAudioPlayer();
+                    }
+                });
+                currentAudio.addEventListener('play', () => {
+                    if (!isDraggingProgress) {
+                        // Проверяем, что время не было сброшено на 0
+                        // Если время 0, но мы не в начале, значит что-то пошло не так
+                        if (currentAudio.currentTime === 0 && audioProgress && parseFloat(audioProgress.value) > 0) {
+                            // Восстанавливаем время из прогресса
+                            const progress = parseFloat(audioProgress.value) / 100;
+                            currentAudio.currentTime = currentAudio.duration * progress;
+                        }
+                        updateAudioPlayer();
+                    }
+                });
+                currentAudio.addEventListener('pause', () => {
+                    if (!isDraggingProgress) updateAudioPlayer();
+                });
+                currentAudio.addEventListener('ended', () => {
+                    isSpeaking = false;
+                    currentAudio = null;
+                    updateAudioPlayer();
+                });
+                currentAudio.addEventListener('error', (e) => {
+                    console.error('Ошибка воспроизведения аудио:', e);
+                    currentAudio = null;
+                    updateAudioPlayer();
+                });
                 
                 isSpeaking = true;
                 await currentAudio.play();
@@ -1206,6 +1291,10 @@ document.addEventListener('DOMContentLoaded', function() {
             updateAudioPlayer();
             return;
         }
+        
+        // Показываем проигрыватель при браузерной озвучке
+        isSpeaking = true;
+        updateAudioPlayer();
         
         // Разбиваем на предложения
         const sentences = splitIntoSentences(storyText);
@@ -1322,11 +1411,55 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateAudioPlayer() {
         if (!audioPlayer) return;
         
-        // Проигрыватель всегда виден
-        audioPlayer.classList.remove('hidden');
+        // Не обновляем прогресс во время перетаскивания
+        if (isDraggingProgress && currentAudio) {
+            return;
+        }
         
-        // Если аудио нет, показываем начальное состояние
-        if (!currentAudio) {
+        // Показываем проигрыватель, если есть аудио или идет озвучка
+        if (currentAudio || isSpeaking) {
+            audioPlayer.classList.remove('hidden');
+            
+            // Если есть аудио, обновляем время и прогресс
+            if (currentAudio) {
+                const current = currentAudio.currentTime || 0;
+                const duration = currentAudio.duration || 0;
+                
+                if (audioTime) {
+                    if (duration > 0) {
+                        audioTime.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
+                    } else {
+                        audioTime.textContent = `${formatTime(current)} / --:--`;
+                    }
+                }
+                
+                if (audioProgress && !isDraggingProgress) {
+                    const progress = duration > 0 ? (current / duration) * 100 : 0;
+                    audioProgress.value = progress;
+                }
+                
+                if (audioPlayIcon) {
+                    if (currentAudio.paused) {
+                        audioPlayIcon.textContent = '▶';
+                    } else {
+                        audioPlayIcon.textContent = '⏸';
+                    }
+                }
+            } else {
+                // Если идет браузерная озвучка, показываем только время
+                if (audioTime) {
+                    audioTime.textContent = 'Озвучка...';
+                }
+                if (audioProgress) {
+                    audioProgress.value = 0;
+                }
+                if (audioPlayIcon) {
+                    audioPlayIcon.textContent = '⏸';
+                }
+            }
+        } else {
+            // Скрываем проигрыватель, если нет аудио и не идет озвучка
+            audioPlayer.classList.add('hidden');
             if (audioTime) {
                 audioTime.textContent = '0:00 / 0:00';
             }
@@ -1336,33 +1469,42 @@ document.addEventListener('DOMContentLoaded', function() {
             if (audioPlayIcon) {
                 audioPlayIcon.textContent = '▶';
             }
-            return;
         }
         
-        // Обновляем время
-        const current = currentAudio.currentTime || 0;
-        const duration = currentAudio.duration || 0;
-        if (audioTime) {
-            audioTime.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
-        }
+        updateSpeakButton();
+    }
+    
+    // Обновление состояния кнопки "Озвучить" при изменении состояния аудио
+    function updateSpeakButton() {
+        const speakStoryBtn = document.getElementById('speak-story-btn');
+        const speakStoryIcon = document.getElementById('speak-story-icon');
+        const speakStoryText = document.getElementById('speak-story-text');
         
-        // Обновляем прогресс
-        if (audioProgress) {
-            const progress = duration > 0 ? (current / duration) * 100 : 0;
-            audioProgress.value = progress;
-        }
+        if (!speakStoryBtn || !speakStoryIcon || !speakStoryText) return;
         
-        // Обновляем иконку play/pause
-        if (audioPlayIcon) {
-            if (currentAudio.paused) {
-                audioPlayIcon.textContent = '▶';
-            } else {
-                audioPlayIcon.textContent = '⏸';
-            }
+        if (isSpeaking && currentAudio && !currentAudio.paused) {
+            speakStoryIcon.textContent = '⏸️';
+            speakStoryText.textContent = 'Пауза';
+            speakStoryBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            speakStoryBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+        } else {
+            speakStoryIcon.textContent = '🔊';
+            speakStoryText.textContent = 'Озвучить';
+            speakStoryBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+            speakStoryBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
         }
     }
     
-    // Обработка кнопки play/pause
+    // Обработка кнопки "Озвучить" в верхней части
+    const speakStoryBtn = document.getElementById('speak-story-btn');
+    
+    if (speakStoryBtn) {
+        speakStoryBtn.addEventListener('click', async function() {
+            await speakStory();
+        });
+    }
+    
+    // Обработка кнопки play/pause в проигрывателе
     if (audioPlayPauseBtn) {
         audioPlayPauseBtn.addEventListener('click', async function() {
             if (!currentAudio) {
@@ -1396,35 +1538,214 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Переменные для отслеживания перетаскивания
+    let isDraggingProgress = false;
+    let wasPlayingBeforeDrag = false;
+    
     // Обработка изменения прогресса
     if (audioProgress) {
-        let isDragging = false;
+        // Функция для установки времени воспроизведения
+        function setAudioTime(progress) {
+            if (!currentAudio || !currentAudio.duration) return;
+            const newTime = currentAudio.duration * (progress / 100);
+            currentAudio.currentTime = newTime;
+            
+            // Обновляем время вручную для мгновенной обратной связи
+            if (audioTime) {
+                const duration = currentAudio.duration || 0;
+                audioTime.textContent = `${formatTime(newTime)} / ${formatTime(duration)}`;
+            }
+        }
         
-        audioProgress.addEventListener('mousedown', () => {
-            isDragging = true;
-        });
+        // Функция для завершения перетаскивания
+        function finishDragging() {
+            if (!currentAudio || !isDraggingProgress) return;
+            
+            const progress = parseFloat(audioProgress.value);
+            const newTime = currentAudio.duration * (progress / 100);
+            
+            // Сохраняем состояние перед сбросом флагов
+            const shouldResume = wasPlayingBeforeDrag;
+            
+            // Сбрасываем флаг перетаскивания ПЕРЕД установкой времени
+            isDraggingProgress = false;
+            wasPlayingBeforeDrag = false;
+            
+            // Обновляем время и прогресс вручную ПЕРЕД установкой времени
+            if (audioTime) {
+                const duration = currentAudio.duration || 0;
+                audioTime.textContent = `${formatTime(newTime)} / ${formatTime(duration)}`;
+            }
+            if (audioProgress) {
+                audioProgress.value = progress;
+            }
+            
+            // Устанавливаем время напрямую
+            currentAudio.currentTime = newTime;
+            
+            // Возобновляем воспроизведение, если оно было запущено
+            if (shouldResume) {
+                // Используем событие 'seeked' для гарантии, что время установлено
+                const onSeeked = () => {
+                    if (currentAudio && currentAudio.paused) {
+                        // Проверяем время перед запуском
+                        const actualTime = currentAudio.currentTime;
+                        if (Math.abs(actualTime - newTime) < 1.0) {
+                            // Время установлено правильно, запускаем
+                            // Добавляем защиту от сброса времени при play
+                            const onPlayProtection = () => {
+                                // Если время сбросилось на 0, восстанавливаем его
+                                if (currentAudio && currentAudio.currentTime === 0 && progress > 0) {
+                                    const restoreTime = currentAudio.duration * (progress / 100);
+                                    currentAudio.currentTime = restoreTime;
+                                }
+                            };
+                            currentAudio.addEventListener('play', onPlayProtection, { once: true });
+                            
+                            // Также проверяем время после небольшой задержки после play
+                            const checkAfterPlay = () => {
+                                setTimeout(() => {
+                                    if (currentAudio && currentAudio.currentTime === 0 && progress > 0) {
+                                        const restoreTime = currentAudio.duration * (progress / 100);
+                                        currentAudio.currentTime = restoreTime;
+                                    }
+                                }, 50);
+                            };
+                            
+                            currentAudio.play()
+                                .then(() => checkAfterPlay())
+                                .catch(e => console.error('Ошибка воспроизведения:', e));
+                        } else {
+                            // Время не установилось, устанавливаем еще раз
+                            currentAudio.currentTime = newTime;
+                            setTimeout(() => {
+                                if (currentAudio && currentAudio.paused) {
+                                    currentAudio.play().catch(e => console.error('Ошибка воспроизведения:', e));
+                                }
+                            }, 50);
+                        }
+                    }
+                };
+                
+                // Добавляем обработчик с once: true для автоматического удаления
+                currentAudio.addEventListener('seeked', onSeeked, { once: true });
+                
+                // Fallback на случай, если событие seeked не сработает
+                setTimeout(() => {
+                    if (currentAudio && currentAudio.paused) {
+                        const actualTime = currentAudio.currentTime;
+                        // Если время близко к нужному, запускаем
+                        if (Math.abs(actualTime - newTime) < 1.0) {
+                            // Добавляем защиту от сброса времени
+                            const onPlayProtection = () => {
+                                if (currentAudio && currentAudio.currentTime === 0 && progress > 0) {
+                                    const restoreTime = currentAudio.duration * (progress / 100);
+                                    currentAudio.currentTime = restoreTime;
+                                }
+                            };
+                            currentAudio.addEventListener('play', onPlayProtection, { once: true });
+                            
+                            currentAudio.play()
+                                .then(() => {
+                                    setTimeout(() => {
+                                        if (currentAudio && currentAudio.currentTime === 0 && progress > 0) {
+                                            const restoreTime = currentAudio.duration * (progress / 100);
+                                            currentAudio.currentTime = restoreTime;
+                                        }
+                                    }, 50);
+                                })
+                                .catch(e => console.error('Ошибка воспроизведения:', e));
+                        } else {
+                            // Иначе устанавливаем время еще раз
+                            currentAudio.currentTime = newTime;
+                            setTimeout(() => {
+                                if (currentAudio && currentAudio.paused) {
+                                    currentAudio.play().catch(e => console.error('Ошибка воспроизведения:', e));
+                                }
+                            }, 50);
+                        }
+                    }
+                }, 150);
+            }
+            
+            // Обновляем проигрыватель после небольшой задержки
+            setTimeout(() => {
+                updateAudioPlayer();
+            }, 100);
+        }
         
-        audioProgress.addEventListener('mouseup', () => {
-            if (currentAudio && isDragging) {
-                const progress = audioProgress.value / 100;
-                currentAudio.currentTime = currentAudio.duration * progress;
-                isDragging = false;
+        audioProgress.addEventListener('mousedown', (e) => {
+            if (currentAudio) {
+                isDraggingProgress = true;
+                wasPlayingBeforeDrag = !currentAudio.paused;
+                // Паузируем во время перетаскивания для плавности
+                if (wasPlayingBeforeDrag) {
+                    currentAudio.pause();
+                }
+                // Устанавливаем время сразу при клике
+                const rect = audioProgress.getBoundingClientRect();
+                const percent = ((e.clientX - rect.left) / rect.width) * 100;
+                setAudioTime(Math.max(0, Math.min(100, percent)));
             }
         });
         
         audioProgress.addEventListener('input', () => {
-            if (currentAudio && isDragging) {
-                const progress = audioProgress.value / 100;
-                currentAudio.currentTime = currentAudio.duration * progress;
+            if (currentAudio && isDraggingProgress) {
+                const progress = parseFloat(audioProgress.value);
+                setAudioTime(progress);
             }
         });
         
-        // Обновление при перетаскивании
-        audioProgress.addEventListener('change', () => {
-            if (currentAudio && !isDragging) {
-                const progress = audioProgress.value / 100;
-                currentAudio.currentTime = currentAudio.duration * progress;
+        audioProgress.addEventListener('mouseup', () => {
+            finishDragging();
+        });
+        
+        // Обработка случая, когда мышь уходит за пределы слайдера во время перетаскивания
+        document.addEventListener('mouseup', () => {
+            if (isDraggingProgress) {
+                finishDragging();
             }
+        });
+        
+        // Обработка для простого клика (без перетаскивания)
+        audioProgress.addEventListener('change', () => {
+            if (currentAudio && !isDraggingProgress) {
+                const progress = parseFloat(audioProgress.value);
+                setAudioTime(progress);
+                updateAudioPlayer();
+            }
+        });
+        
+        // Обработка для touch устройств
+        audioProgress.addEventListener('touchstart', (e) => {
+            if (currentAudio) {
+                isDraggingProgress = true;
+                wasPlayingBeforeDrag = !currentAudio.paused;
+                if (wasPlayingBeforeDrag) {
+                    currentAudio.pause();
+                }
+                // Устанавливаем время сразу при касании
+                const rect = audioProgress.getBoundingClientRect();
+                const touch = e.touches[0];
+                const percent = ((touch.clientX - rect.left) / rect.width) * 100;
+                setAudioTime(Math.max(0, Math.min(100, percent)));
+            }
+        });
+        
+        audioProgress.addEventListener('touchmove', (e) => {
+            if (currentAudio && isDraggingProgress) {
+                e.preventDefault();
+                const rect = audioProgress.getBoundingClientRect();
+                const touch = e.touches[0];
+                const percent = ((touch.clientX - rect.left) / rect.width) * 100;
+                const progress = Math.max(0, Math.min(100, percent));
+                audioProgress.value = progress;
+                setAudioTime(progress);
+            }
+        });
+        
+        audioProgress.addEventListener('touchend', () => {
+            finishDragging();
         });
     }
     
