@@ -34,7 +34,13 @@
                 <img id="question-image" src="" alt="Kanji image" class="max-w-xs mx-auto rounded-lg">
             </div>
             <div class="text-6xl font-bold text-white mb-4" id="question-text" style="font-family: 'Noto Sans JP', sans-serif;"></div>
-            <div class="text-xl text-gray-400" id="question-hint"></div>
+            <div class="text-xl text-gray-400 mb-4" id="question-hint"></div>
+            <div id="hint-container" class="mb-4 hidden">
+                <button id="hint-button" class="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold px-6 py-2 rounded-lg transition-all shadow-lg hover:shadow-yellow-500/50">
+                    💡 Показать подсказку
+                </button>
+                <div id="hint-text" class="mt-4 p-4 bg-gray-700/50 rounded-lg border border-yellow-600/50 text-gray-300 hidden"></div>
+            </div>
         </div>
 
         <div id="answers-container" class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
@@ -106,6 +112,10 @@ document.addEventListener('DOMContentLoaded', function() {
     let answeredCount = 0;
     const totalCount = {{ $count }};
     let answered = false;
+    const hintContainer = document.getElementById('hint-container');
+    const hintButton = document.getElementById('hint-button');
+    const hintText = document.getElementById('hint-text');
+    const questionImageContainer = document.getElementById('question-image-container');
 
     // Загружаем первый вопрос
     loadQuestion();
@@ -115,6 +125,12 @@ document.addEventListener('DOMContentLoaded', function() {
         resultContainer.classList.add('hidden');
         answersContainer.innerHTML = '';
         answersContainer.classList.remove('hidden');
+        
+        // Скрываем подсказку и изображение по умолчанию
+        hintContainer.classList.add('hidden');
+        hintText.classList.add('hidden');
+        hintButton.textContent = '💡 Показать подсказку';
+        questionImageContainer.classList.add('hidden');
         
         fetch(`{{ route('kanji.get-question') }}?count=${totalCount}&jlpt_level={{ $jlptLevel }}`, {
             headers: {
@@ -126,21 +142,42 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             currentQuestion = data;
             
-            // Скрываем изображение по умолчанию
-            document.getElementById('question-image-container').classList.add('hidden');
-            
             if (data.question_type === 'kanji_to_ru') {
                 questionText.textContent = data.question;
                 questionHint.textContent = 'Выберите правильный перевод:';
+                
+                // Показываем изображение только для kanji_to_ru
+                if (data.image_path) {
+                    let imageUrl;
+                    if (data.image_path.startsWith('/storage/') || data.image_path.startsWith('http://') || data.image_path.startsWith('https://')) {
+                        imageUrl = data.image_path;
+                    } else if (data.image_path.startsWith('storage/')) {
+                        imageUrl = '/' + data.image_path;
+                    } else {
+                        imageUrl = '{{ asset("storage") }}/' + data.image_path;
+                    }
+                    document.getElementById('question-image').src = imageUrl;
+                    questionImageContainer.classList.remove('hidden');
+                }
+                
+                // Показываем кнопку подсказки, если есть мнемоника
+                if (data.mnemonic && data.mnemonic.trim() !== '') {
+                    hintContainer.classList.remove('hidden');
+                    hintText.textContent = data.mnemonic;
+                } else {
+                    hintContainer.classList.add('hidden');
+                }
             } else {
+                // ru_to_kanji - не показываем изображение
                 questionText.textContent = data.question;
                 questionHint.textContent = 'Выберите правильный кандзи:';
                 
-                // Показываем изображение только для вопросов типа ru_to_kanji
-                if (data.image_path) {
-                    const imageUrl = '{{ asset("storage") }}/' + data.image_path;
-                    document.getElementById('question-image').src = imageUrl;
-                    document.getElementById('question-image-container').classList.remove('hidden');
+                // Показываем кнопку подсказки, если есть мнемоника
+                if (data.mnemonic && data.mnemonic.trim() !== '') {
+                    hintContainer.classList.remove('hidden');
+                    hintText.textContent = data.mnemonic;
+                } else {
+                    hintContainer.classList.add('hidden');
                 }
             }
             
@@ -233,6 +270,17 @@ document.addEventListener('DOMContentLoaded', function() {
     nextButton.addEventListener('click', function() {
         if (answeredCount < totalCount) {
             loadQuestion();
+        }
+    });
+    
+    // Обработчик кнопки подсказки
+    hintButton.addEventListener('click', function() {
+        if (hintText.classList.contains('hidden')) {
+            hintText.classList.remove('hidden');
+            hintButton.textContent = '💡 Скрыть подсказку';
+        } else {
+            hintText.classList.add('hidden');
+            hintButton.textContent = '💡 Показать подсказку';
         }
     });
 });

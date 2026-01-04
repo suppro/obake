@@ -88,12 +88,23 @@ class KanjiController extends Controller
     /**
      * Главная страница изучения кандзи
      */
-    public function index()
+    public function index(Request $request)
     {
         $user = Auth::user();
         
         // Получаем все кандзи с прогрессом пользователя
-        $allKanji = Kanji::where('is_active', true)->get();
+        $query = Kanji::where('is_active', true);
+        
+        // Фильтр поиска
+        $search = $request->get('search');
+        if ($search) {
+            $query->where(function($q) use ($search) {
+                $q->where('translation_ru', 'like', "%{$search}%")
+                  ->orWhere('reading', 'like', "%{$search}%");
+            });
+        }
+        
+        $allKanji = $query->get();
         $userProgress = KanjiStudyProgress::where('user_id', $user->id)
             ->get()
             ->keyBy('kanji');
@@ -107,22 +118,41 @@ class KanjiController extends Controller
                 return [
                     'kanji' => $kanji->kanji,
                     'translation' => $kanji->translation_ru,
+                    'reading' => $kanji->reading,
                     'jlpt_level' => $kanji->jlpt_level,
                     'level' => $progress ? $progress->level : 0,
                     'last_reviewed_at' => $progress ? $progress->last_reviewed_at : null,
                     'is_completed' => $progress ? ($progress->is_completed ?? false) : false,
                     'image_path' => $kanji->image_path,
                     'mnemonic' => $kanji->mnemonic,
+                    'description' => $kanji->description, // Примеры слов
                 ];
             })->sortBy('level')->values();
-        })->sortKeys();
+        });
+        
+        // Сортируем уровни: N5 -> N4 -> N3 -> N2 -> N1 -> Без уровня
+        $sortedKanjiByLevel = collect();
+        $levelOrder = ['N5', 'N4', 'N3', 'N2', 'N1', 'Без уровня'];
+        foreach ($levelOrder as $level) {
+            if ($kanjiByLevel->has($level)) {
+                $sortedKanjiByLevel->put($level, $kanjiByLevel->get($level));
+            }
+        }
+        // Добавляем остальные уровни, если есть
+        foreach ($kanjiByLevel as $level => $kanjiList) {
+            if (!in_array($level, $levelOrder)) {
+                $sortedKanjiByLevel->put($level, $kanjiList);
+            }
+        }
         
         // Статистика
-        $totalKanji = $allKanji->count();
+        $totalKanji = Kanji::where('is_active', true)->count();
         $studiedKanji = $userProgress->count();
         $completedKanji = $userProgress->where('level', '>=', 10)->count();
         
-        return view('kanji.index', compact('kanjiByLevel', 'totalKanji', 'studiedKanji', 'completedKanji'));
+        $isAdmin = $user->isAdmin();
+        
+        return view('kanji.index', compact('sortedKanjiByLevel', 'totalKanji', 'studiedKanji', 'completedKanji', 'search', 'isAdmin'));
     }
 
     /**
@@ -193,9 +223,10 @@ class KanjiController extends Controller
             return $translation === $correctAnswer;
         })->take(5)->toArray();
         
-        // Получаем модель кандзи для получения изображения
+        // Получаем модель кандзи для получения изображения и мнемоники
         $kanjiModel = Kanji::where('kanji', $kanjiToStudy['kanji'])->where('is_active', true)->first();
         $imagePath = $kanjiModel ? $kanjiModel->image_path : null;
+        $mnemonic = $kanjiModel ? $kanjiModel->mnemonic : null;
         
         // Если вопрос типа kanji_to_ru
         if ($questionType === 'kanji_to_ru') {
@@ -209,6 +240,7 @@ class KanjiController extends Controller
                 'correct_answer' => $correctAnswer,
                 'kanji' => $kanjiToStudy['kanji'],
                 'image_path' => $imagePath,
+                'mnemonic' => $mnemonic,
             ]);
         } else {
             // Если вопрос типа ru_to_kanji
@@ -226,7 +258,8 @@ class KanjiController extends Controller
                 'answers' => $answers,
                 'correct_answer' => $kanjiToStudy['kanji'],
                 'kanji' => $kanjiToStudy['kanji'],
-                'image_path' => $imagePath,
+                'image_path' => null, // Не показываем изображение для ru_to_kanji
+                'mnemonic' => $mnemonic,
             ]);
         }
     }

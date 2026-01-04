@@ -14,6 +14,7 @@ class Kanji extends Model
 
     protected $fillable = [
         'kanji',
+        'reading',
         'translation_ru',
         'jlpt_level',
         'description',

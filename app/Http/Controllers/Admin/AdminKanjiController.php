@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Kanji;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class AdminKanjiController extends Controller
 {
@@ -76,5 +77,45 @@ class AdminKanjiController extends Controller
         $kanji->delete();
 
         return redirect()->route('admin.kanji.index')->with('success', 'Кандзи успешно удален');
+    }
+
+    /**
+     * Обновить изображение кандзи
+     */
+    public function updateImage(Request $request)
+    {
+        $validated = $request->validate([
+            'kanji' => ['required', 'string'],
+            'image' => ['required', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120'], // Максимум 5MB
+        ]);
+
+        $kanji = Kanji::where('kanji', $validated['kanji'])->firstOrFail();
+
+        // Удаляем старое изображение, если есть
+        if ($kanji->image_path && Storage::disk('public')->exists($kanji->image_path)) {
+            Storage::disk('public')->delete($kanji->image_path);
+        }
+
+        // Сохраняем новое изображение
+        $imageFile = $request->file('image');
+        $imagePath = 'kanji/' . $kanji->kanji . '.' . $imageFile->getClientOriginalExtension();
+        Storage::disk('public')->putFileAs('kanji', $imageFile, $kanji->kanji . '.' . $imageFile->getClientOriginalExtension());
+        
+        $kanji->image_path = $imagePath;
+        $kanji->save();
+
+        // Возвращаем JSON для AJAX запросов
+        if ($request->expectsJson() || $request->wantsJson()) {
+            // Используем asset() для формирования полного URL
+            $fullImageUrl = asset('storage/' . $imagePath);
+            return response()->json([
+                'success' => true,
+                'image_path' => $fullImageUrl,
+                'relative_path' => $imagePath, // Относительный путь для обновления data-атрибута
+                'message' => 'Изображение успешно загружено'
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Изображение успешно загружено');
     }
 }

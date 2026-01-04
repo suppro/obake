@@ -76,4 +76,5 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     
     // CRUD для кандзи
     Route::resource('kanji', \App\Http\Controllers\Admin\AdminKanjiController::class);
+    Route::post('/kanji/update-image', [\App\Http\Controllers\Admin\AdminKanjiController::class, 'updateImage'])->name('kanji.update-image');
 });
