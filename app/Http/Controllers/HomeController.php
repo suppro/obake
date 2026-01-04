@@ -59,4 +59,30 @@ class HomeController extends Controller
         
         return view('dashboard', compact('repetitionDates', 'today', 'selectedYear', 'startDate', 'endDate', 'firstDayWeekday', 'weeksInYear'));
     }
+
+    public function updateSettings(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'daily_words_quota' => ['required', 'integer', 'min:1', 'max:100'],
+            ]);
+
+            $user = Auth::user();
+            $user->daily_words_quota = (int)$validated['daily_words_quota'];
+            $user->save();
+
+            return response()->json(['success' => true, 'message' => 'Настройки обновлены']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Ошибка валидации',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Ошибка при сохранении настроек: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

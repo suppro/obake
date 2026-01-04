@@ -244,6 +244,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 wordCard.classList.remove('hidden');
                 userAnswerInput.focus();
+                
+                // Озвучивание отключено в режиме повторения
             })
             .catch(error => {
                 console.error('Error:', error);

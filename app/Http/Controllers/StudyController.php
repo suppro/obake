@@ -123,6 +123,7 @@ class StudyController extends Controller
                 'reading' => $word->reading,
                 'translation_ru' => $word->translation_ru,
                 'translation_en' => $word->translation_en,
+                'audio_path' => $word->audio_path,
                 'direction' => $direction, // Добавляем направление в объект слова
             ],
             'direction' => $direction,
@@ -220,6 +221,9 @@ class StudyController extends Controller
      */
     private function getWordsToReview($user, $today)
     {
+        // Получаем дневную норму пользователя
+        $dailyQuota = $user->daily_words_quota ?? 10;
+        
         // Получаем все слова в изучении
         $progresses = WordStudyProgress::where('user_id', $user->id)
             ->where('is_completed', false)
@@ -259,7 +263,9 @@ class StudyController extends Controller
             }
         }
 
-        return $wordsToReview;
+        // Ограничиваем количество слов дневной нормой (каждое слово имеет 2 направления, поэтому делим на 2)
+        $maxWords = $dailyQuota;
+        return $wordsToReview->take($maxWords * 2);
     }
 
     /**
@@ -269,6 +275,9 @@ class StudyController extends Controller
     {
         $user = Auth::user();
         $today = Carbon::today();
+        
+        // Получаем дневную норму пользователя
+        $dailyQuota = $user->daily_words_quota ?? 10;
         
         // Получаем изученные слова (можно повторить)
         $completedWords = WordStudyProgress::where('user_id', $user->id)
@@ -285,8 +294,18 @@ class StudyController extends Controller
             ]);
         }
 
-        // Выбираем случайное слово
-        $randomWord = $completedWords->random();
+        // Ограничиваем количество слов дневной нормой
+        $wordsToReview = $completedWords->shuffle()->take($dailyQuota);
+        
+        if ($wordsToReview->isEmpty()) {
+            return response()->json([
+                'has_words' => false,
+                'message' => 'Нет изученных слов для повторения'
+            ]);
+        }
+
+        // Выбираем случайное слово из отобранных
+        $randomWord = $wordsToReview->random();
         $progress = WordStudyProgress::where('user_id', $user->id)
             ->where('word_id', $randomWord->id)
             ->first();
@@ -303,6 +322,7 @@ class StudyController extends Controller
                 'reading' => $randomWord->reading,
                 'translation_ru' => $randomWord->translation_ru,
                 'translation_en' => $randomWord->translation_en,
+                'audio_path' => $randomWord->audio_path,
                 'direction' => $direction,
             ],
             'direction' => $direction,

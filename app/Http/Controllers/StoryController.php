@@ -34,12 +34,12 @@ class StoryController extends Controller
         $story = Story::findOrFail($id);
         $user = Auth::user();
         
-        // Получаем слова из словаря пользователя
+        // Получаем слова из словаря пользователя (только для подсветки)
         $userWordIds = $user->dictionary()->get()->pluck('id')->toArray();
         
-        // Получаем ВСЕ слова из глобального словаря для автоматического определения тултипов
-        // JavaScript автоматически найдет все слова, которые встречаются в тексте
-        $words = GlobalDictionary::all()->keyBy('id');
+        // Получаем только слова пользователя из глобального словаря для подсветки
+        // Информация о словах при наведении будет браться из внешнего API
+        $words = GlobalDictionary::whereIn('id', $userWordIds)->get()->keyBy('id');
         
         // Получаем информацию о прогрессе изучения слов
         $wordProgress = WordStudyProgress::where('user_id', $user->id)

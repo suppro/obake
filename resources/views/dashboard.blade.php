@@ -47,6 +47,18 @@
             </div>
         </div>
         
+        <div class="bg-gray-800 rounded-lg p-6 shadow-lg mb-6">
+            <h2 class="text-2xl font-bold mb-4">⚙️ Настройки</h2>
+            <div class="flex items-center gap-4">
+                <label class="text-gray-300">Дневная норма слов для повторения:</label>
+                <input type="number" id="daily-words-quota" value="{{ auth()->user()->daily_words_quota ?? 10 }}" min="1" max="100" 
+                       class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white w-24 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                <button id="save-settings-btn" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition">
+                    Сохранить
+                </button>
+            </div>
+        </div>
+        
         <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-2xl font-bold">📅 Календарь активности</h2>
@@ -196,5 +208,66 @@
         }
     }
 </style>
+@endpush
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const saveSettingsBtn = document.getElementById('save-settings-btn');
+    const dailyWordsQuotaInput = document.getElementById('daily-words-quota');
+    
+    saveSettingsBtn.addEventListener('click', function() {
+        const quota = parseInt(dailyWordsQuotaInput.value);
+        if (quota < 1 || quota > 100) {
+            alert('Дневная норма должна быть от 1 до 100');
+            return;
+        }
+        
+        this.disabled = true;
+        this.textContent = 'Сохранение...';
+        
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+        
+        fetch('{{ route("settings.update") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                daily_words_quota: quota
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => Promise.reject(err));
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                alert('Настройки сохранены');
+            } else {
+                alert(data.error || data.message || 'Ошибка при сохранении настроек');
+            }
+            this.disabled = false;
+            this.textContent = 'Сохранить';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            let errorMessage = 'Ошибка при сохранении настроек';
+            if (error.message) {
+                errorMessage = error.message;
+            } else if (error.errors && error.errors.daily_words_quota) {
+                errorMessage = error.errors.daily_words_quota[0];
+            }
+            alert(errorMessage);
+            this.disabled = false;
+            this.textContent = 'Сохранить';
+        });
+    });
+});
+</script>
 @endpush
 @endsection

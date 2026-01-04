@@ -25,15 +25,10 @@
         </div>
     </div>
     
-    <div class="grid md:grid-cols-3 gap-6">
+    <div class="grid md:grid-cols-2 gap-6">
         <a href="{{ route('admin.stories.index') }}" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition shadow-lg">
             <h2 class="text-2xl font-bold mb-2 text-purple-400">📚 Управление рассказами</h2>
             <p class="text-gray-400">Создавайте, редактируйте и удаляйте рассказы</p>
-        </a>
-        
-        <a href="{{ route('admin.dictionary.index') }}" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition shadow-lg">
-            <h2 class="text-2xl font-bold mb-2 text-purple-400">📖 Управление словарем</h2>
-            <p class="text-gray-400">Добавляйте и редактируйте слова в глобальном словаре</p>
         </a>
         
         <a href="{{ route('admin.kanji.index') }}" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition shadow-lg">

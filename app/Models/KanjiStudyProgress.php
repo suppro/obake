@@ -16,10 +16,12 @@ class KanjiStudyProgress extends Model
         'translation_ru',
         'level',
         'last_reviewed_at',
+        'is_completed',
     ];
 
     protected $casts = [
         'last_reviewed_at' => 'datetime',
+        'is_completed' => 'boolean',
     ];
 
     /**

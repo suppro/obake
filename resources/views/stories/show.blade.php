@@ -424,207 +424,147 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Функция для разметки текста
+    // Теперь только подсвечиваем слова пользователя, остальной текст остается как есть
     function processStoryContent(content, words, userWordIds, showFurigana, progress) {
         if (!content) return '';
-        if (!words || Object.keys(words).length === 0) return content;
+        
+        // Если нет слов пользователя, просто возвращаем текст
+        if (!words || Object.keys(words).length === 0) {
+            return content;
+        }
         
         let processed = content;
-        const wordPatterns = [];
-        const processedPositions = new Set(); // Отслеживаем уже обработанные позиции
-        
-        // Создаем паттерны для всех слов, включая формы спряжения
-        Object.values(words).forEach(word => {
-            if (!word || !word.japanese) return; // Пропускаем некорректные слова
-            
-            const baseWord = word.japanese;
-            const reading = word.reading || '';
-            
-            // Генерируем все возможные формы для глаголов и прилагательных
-            // Базовая форма всегда использует полное чтение
-            let wordForms = [{form: baseWord, reading: reading || ''}];
-            
-            // Проверяем тип слова (может быть "Глагол", "Глагол (う-глагол)", "verb" и т.д.)
-            const wordTypeLower = (word.word_type || '').toLowerCase();
-            if (wordTypeLower.includes('глагол') || wordTypeLower.includes('verb')) {
-                try {
-                    const forms = generateVerbForms(baseWord, reading || '');
-                    if (forms && forms.length > 1) {
-                        // Добавляем все формы глагола
-                        wordForms = forms;
-                    }
-                    
-                    // Если есть чтение и оно отличается от самого слова, генерируем формы и для хираганы
-                    // Это позволяет находить слова, написанные хираганой, даже если в словаре они записаны кандзи
-                    if (reading && reading !== baseWord) {
-                        const readingForms = generateVerbForms(reading, reading);
-                        // Добавляем формы на основе чтения (хираганы), если они еще не добавлены
-                        readingForms.forEach(readingForm => {
-                            const rfForm = typeof readingForm === 'string' ? readingForm : readingForm.form;
-                            // Проверяем, нет ли уже такой формы
-                            const exists = wordForms.some(f => {
-                                const fForm = typeof f === 'string' ? f : f.form;
-                                return fForm === rfForm;
-                            });
-                            if (!exists) {
-                                wordForms.push(readingForm);
-                            }
-                        });
-                    }
-                } catch (error) {
-                    console.error(`Ошибка при генерации форм глагола ${baseWord}:`, error);
-                }
-            } else if (wordTypeLower.includes('прилагательное') || wordTypeLower.includes('adjective') || 
-                      wordTypeLower.includes('形容詞') || baseWord.endsWith('い')) {
-                try {
-                    const forms = generateAdjectiveForms(baseWord, reading || '', word.word_type);
-                    if (forms && forms.length > 1) {
-                        // Добавляем все формы прилагательного
-                        wordForms = forms;
-                    }
-                    
-                    // Если есть чтение и оно отличается от самого слова, генерируем формы и для хираганы
-                    // Это позволяет находить слова, написанные хираганой, даже если в словаре они записаны кандзи
-                    if (reading && reading !== baseWord) {
-                        const readingForms = generateAdjectiveForms(reading, reading, word.word_type);
-                        // Добавляем формы на основе чтения (хираганы), если они еще не добавлены
-                        readingForms.forEach(readingForm => {
-                            const rfForm = typeof readingForm === 'string' ? readingForm : readingForm.form;
-                            // Проверяем, нет ли уже такой формы
-                            const exists = wordForms.some(f => {
-                                const fForm = typeof f === 'string' ? f : f.form;
-                                return fForm === rfForm;
-                            });
-                            if (!exists) {
-                                wordForms.push(readingForm);
-                            }
-                        });
-                    }
-                } catch (error) {
-                    console.error(`Ошибка при генерации форм прилагательного ${baseWord}:`, error);
-                }
-            } else {
-                // Для существительных и других слов: если есть чтение и оно отличается, добавляем его как альтернативу
-                // Это позволяет находить слова, написанные хираганой, даже если в словаре они записаны кандзи
-                if (reading && reading !== baseWord) {
-                    wordForms.push({form: reading, reading: reading});
-                }
-            }
-            
-            // Создаем паттерны для всех форм
-            // wordForms может быть массивом строк или объектов с формой и чтением
-            wordForms.forEach(formData => {
-                let form, formReading;
-                if (typeof formData === 'string') {
-                    // Если это просто строка (базовая форма)
-                    form = formData;
-                    formReading = reading; // Используем полное чтение
-                } else {
-                    // Если это объект с формой и чтением
-                    form = formData.form;
-                    formReading = formData.reading || reading;
-                }
-                
-                const escapedWord = form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                try {
-                    const pattern = new RegExp(escapedWord, 'g');
-                    wordPatterns.push({
-                        pattern: pattern,
-                        word: word,
-                        length: form.length,
-                        form: form,
-                        reading: formReading // Сохраняем чтение для этой формы
-                    });
-                } catch (error) {
-                    console.error(`Ошибка при создании паттерна для ${form}:`, error);
-                }
-            });
-        });
-        
-        // Сортируем по длине (длиннее сначала), чтобы не заменять части слов
-        wordPatterns.sort((a, b) => b.length - a.length);
-        
-        // Обрабатываем текст, избегая перекрытий
         const matches = [];
-        wordPatterns.forEach(({pattern, word, form, reading: formReading}) => {
-            // Сбрасываем регулярное выражение
-            pattern.lastIndex = 0;
-            let match;
-            const allMatches = [];
+        const processedPositions = new Set();
+        
+        // Находим только слова пользователя для подсветки
+        Object.values(words).forEach(word => {
+            if (!word || (!word.japanese && !word.japanese_word)) return;
             
-            // Собираем все совпадения
-            while ((match = pattern.exec(content)) !== null) {
-                allMatches.push({
-                    start: match.index,
-                    end: match.index + match[0].length,
-                    match: match[0],
-                    word: word,
-                    form: form,
-                    reading: formReading // Сохраняем чтение для этой формы
-                });
+            const wordJapanese = word.japanese || word.japanese_word;
+            const wordReading = word.reading || '';
+            const wordId = word.id;
+            const highlightClass = getHighlightClass(parseInt(wordId), userWordIds, progress);
+            const wordType = word.word_type || '';
+            
+            // Генерируем все возможные формы слова
+            let wordForms = [{form: wordJapanese, reading: wordReading}];
+            
+            // Проверяем тип слова и генерируем формы
+            const wordTypeLower = wordType.toLowerCase();
+            
+            // Сначала проверяем, не является ли это глаголом
+            const isVerb = wordTypeLower.includes('глагол') || wordTypeLower.includes('verb');
+            
+            // Проверяем, не является ли это прилагательным
+            // Прилагательные: явно указанный тип, или слово заканчивается на い (но не глагол)
+            const isAdjective = wordTypeLower.includes('прилагательное') || 
+                               wordTypeLower.includes('adjective') || 
+                               wordTypeLower.includes('形容詞') ||
+                               (!isVerb && wordJapanese.endsWith('い') && wordJapanese.length > 1);
+            
+            if (isVerb) {
+                // Генерируем формы глагола
+                try {
+                    const forms = generateVerbForms(wordJapanese, wordReading);
+                    if (forms && forms.length > 0) {
+                        wordForms = forms;
+                    }
+                } catch (error) {
+                    console.error(`Ошибка при генерации форм глагола ${wordJapanese}:`, error);
+                }
+            } else if (isAdjective) {
+                // Генерируем формы прилагательного
+                try {
+                    const forms = generateAdjectiveForms(wordJapanese, wordReading, wordType);
+                    if (forms && forms.length > 0) {
+                        wordForms = forms;
+                    }
+                } catch (error) {
+                    console.error(`Ошибка при генерации форм прилагательного ${wordJapanese}:`, error);
+                }
             }
             
-            // Проверяем каждое совпадение на перекрытия
-            allMatches.forEach(({start, end, match: matchText, word: wordObj, form: formText, reading: readingForForm}) => {
-                const key = `${start}-${end}`;
+            // Ищем все формы слова в тексте
+            wordForms.forEach(formData => {
+                const form = typeof formData === 'string' ? formData : formData.form;
+                const formReading = typeof formData === 'string' ? wordReading : (formData.reading || wordReading);
                 
-                // Проверяем, не перекрывается ли с уже обработанным
-                let overlaps = false;
-                for (const pos of processedPositions) {
-                    const [posStart, posEnd] = pos.split('-').map(Number);
-                    if (!(end <= posStart || start >= posEnd)) {
-                        overlaps = true;
-                        break;
+                // Ищем форму в тексте
+                const escapedForm = form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const pattern = new RegExp(escapedForm, 'g');
+                let match;
+                
+                while ((match = pattern.exec(content)) !== null) {
+                    const key = `${match.index}-${match.index + match[0].length}`;
+                    
+                    // Проверяем на перекрытия
+                    let overlaps = false;
+                    for (const pos of processedPositions) {
+                        const [posStart, posEnd] = pos.split('-').map(Number);
+                        if (!(match.index + match[0].length <= posStart || match.index >= posEnd)) {
+                            overlaps = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!overlaps) {
+                        matches.push({
+                            start: match.index,
+                            end: match.index + match[0].length,
+                            text: match[0],
+                            wordId: wordId,
+                            highlightClass: highlightClass
+                        });
+                        processedPositions.add(key);
                     }
                 }
                 
-                if (!overlaps) {
-                    matches.push({
-                        start: start,
-                        end: end,
-                        match: matchText,
-                        word: wordObj,
-                        form: formText,
-                        reading: readingForForm, // Сохраняем чтение для этой формы
-                        key: key
-                    });
-                    processedPositions.add(key);
+                // Также ищем по чтению формы, если оно отличается
+                if (formReading && formReading !== form && formReading !== wordJapanese) {
+                    const escapedReading = formReading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const readingPattern = new RegExp(escapedReading, 'g');
+                    
+                    while ((match = readingPattern.exec(content)) !== null) {
+                        const key = `${match.index}-${match.index + match[0].length}`;
+                        
+                        if (!processedPositions.has(key)) {
+                            let overlaps = false;
+                            for (const pos of processedPositions) {
+                                const [posStart, posEnd] = pos.split('-').map(Number);
+                                if (!(match.index + match[0].length <= posStart || match.index >= posEnd)) {
+                                    overlaps = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!overlaps) {
+                                matches.push({
+                                    start: match.index,
+                                    end: match.index + match[0].length,
+                                    text: match[0],
+                                    wordId: wordId,
+                                    highlightClass: highlightClass
+                                });
+                                processedPositions.add(key);
+                            }
+                        }
+                    }
                 }
             });
         });
         
-        // Сортируем совпадения по позиции (с конца, чтобы не сбить индексы)
+        // Сортируем по позиции (с конца, чтобы не сбить индексы)
         matches.sort((a, b) => b.start - a.start);
         
-        // Заменяем совпадения
-        matches.forEach(({start, end, match, word, reading: formReading, key}) => {
-            const highlightClass = getHighlightClass(word.id, userWordIds, progress);
-            
-            // Используем чтение для конкретной формы, если оно есть
-            const readingToUse = formReading || word.reading || '';
-            
-            let replacement = `<span class="word-item ${highlightClass}" 
-                data-word-id="${word.id}"
-                data-reading="${escapeHtml(readingToUse)}"
-                data-translation-ru="${escapeHtml(word.translation_ru)}"
-                data-translation-en="${escapeHtml(word.translation_en)}"
-                data-japanese="${escapeHtml(word.japanese)}">${match}</span>`;
-            
-            // Добавляем фуригану если включена
-            if (showFurigana && readingToUse) {
-                replacement = `<ruby>${match}<rt class="furigana">${readingToUse}</rt></ruby>`;
-                replacement = replacement.replace(match, `<span class="word-item ${highlightClass}" 
-                    data-word-id="${word.id}"
-                    data-reading="${escapeHtml(readingToUse)}"
-                    data-translation-ru="${escapeHtml(word.translation_ru)}"
-                    data-translation-en="${escapeHtml(word.translation_en)}"
-                    data-japanese="${escapeHtml(word.japanese)}">${match}</span>`);
-            }
+        // Размечаем только слова пользователя
+        matches.forEach(({start, end, text, wordId, highlightClass}) => {
+            let replacement = `<span class="${highlightClass}" 
+                data-word-id="${wordId}">${text}</span>`;
             
             processed = processed.substring(0, start) + replacement + processed.substring(end);
-            processedPositions.add(key);
         });
         
-        // Убеждаемся, что возвращаем строку
         return processed || content;
     }
     
@@ -923,41 +863,32 @@ document.addEventListener('DOMContentLoaded', function() {
             // い-прилагательные (например, 大きい, 小さい, 可愛い)
             const stem = baseWord.slice(0, -1); // Убираем い
             // Вычисляем чтение основы
-            // Для большинства い-прилагательных чтение основы = чтение без последнего символа
-            // Но для некоторых (например, 楽しい たのしい) нужно убрать 2 символа
-            // Простое решение: убираем последний символ, если чтение длиннее слова
-            let readingStem = reading;
-            if (reading.length > baseWord.length) {
-                // Если чтение длиннее, убираем разницу
-                const diff = reading.length - baseWord.length;
-                readingStem = reading.slice(0, -(1 + diff));
-            } else {
-                // Иначе просто убираем последний символ
-                readingStem = reading.slice(0, -1);
-            }
+            // Для い-прилагательных чтение основы = чтение без последнего символа (い)
+            // Например: 楽しい (たのしい) -> основа 楽し (たのし)
+            const readingStem = reading.slice(0, -1); // Убираем последний символ (い) из чтения
             
             // Вежливая форма - используем полное чтение
-            forms.push({form: baseWord + 'です', reading: reading});
+            forms.push({form: baseWord + 'です', reading: reading + 'です'});
             
-            // Прошедшее время - используем чтение основы
-            forms.push({form: stem + 'かった', reading: readingStem});
-            forms.push({form: stem + 'かったです', reading: readingStem});
+            // Прошедшее время - используем чтение основы + окончание
+            forms.push({form: stem + 'かった', reading: readingStem + 'かった'});
+            forms.push({form: stem + 'かったです', reading: readingStem + 'かったです'});
             
-            // Отрицательная форма - используем чтение основы
-            forms.push({form: stem + 'くない', reading: readingStem});
-            forms.push({form: stem + 'くないです', reading: readingStem});
-            forms.push({form: stem + 'くありません', reading: readingStem});
+            // Отрицательная форма - используем чтение основы + окончание
+            forms.push({form: stem + 'くない', reading: readingStem + 'くない'});
+            forms.push({form: stem + 'くないです', reading: readingStem + 'くないです'});
+            forms.push({form: stem + 'くありません', reading: readingStem + 'くありません'});
             
-            // Отрицательная прошедшая форма - используем чтение основы
-            forms.push({form: stem + 'くなかった', reading: readingStem});
-            forms.push({form: stem + 'くなかったです', reading: readingStem});
-            forms.push({form: stem + 'くありませんでした', reading: readingStem});
+            // Отрицательная прошедшая форма - используем чтение основы + окончание
+            forms.push({form: stem + 'くなかった', reading: readingStem + 'くなかった'});
+            forms.push({form: stem + 'くなかったです', reading: readingStem + 'くなかったです'});
+            forms.push({form: stem + 'くありませんでした', reading: readingStem + 'くありませんでした'});
             
-            // Те-форма - используем чтение основы
-            forms.push({form: stem + 'くて', reading: readingStem});
+            // Те-форма - используем чтение основы + окончание
+            forms.push({form: stem + 'くて', reading: readingStem + 'くて'});
             
-            // Наречие - используем чтение основы
-            forms.push({form: stem + 'く', reading: readingStem});
+            // Наречие - используем чтение основы + окончание
+            forms.push({form: stem + 'く', reading: readingStem + 'く'});
             
             // Особые случаи для いい (хороший)
             if (baseWord === 'いい' || baseWord === '良い' || baseWord === 'よい') {
@@ -1054,70 +985,315 @@ document.addEventListener('DOMContentLoaded', function() {
         furiganaEnabled = this.checked;
         const content = rawContent;
         storyContent.innerHTML = processStoryContent(content, wordsData, userWords, furiganaEnabled, wordProgress);
-        attachWordEvents();
+        // Используем выделение текста вместо наведения
     });
     
-    // Обработка наведения на слова
-    function attachWordEvents() {
-        document.querySelectorAll('.word-item').forEach(item => {
-            item.addEventListener('mouseenter', function(e) {
-                // Сбрасываем состояние tooltip
-                isTooltipHovered = false;
-                // Отменяем таймер скрытия, если он есть
-                if (hideTooltipTimer) {
-                    clearTimeout(hideTooltipTimer);
-                    hideTooltipTimer = null;
-                }
-                
-                const wordId = this.dataset.wordId;
-                const word = wordsData[wordId];
-                
-                if (word) {
-                    tooltipContent.innerHTML = `
-                        <div class="text-xl font-bold japanese-font mb-2">${word.japanese}</div>
-                        ${word.reading ? `<div class="text-gray-400 mb-2">${word.reading}</div>` : ''}
-                        <div class="text-gray-300 mb-1">${word.translation_ru}</div>
-                        ${word.translation_en ? `<div class="text-gray-400 text-sm">${word.translation_en}</div>` : ''}
-                        <div class="mt-3 flex gap-2 items-center">
-                            <button class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm speak-word-btn flex items-center gap-1" data-word-id="${wordId}" data-word-text="${escapeHtml(word.japanese)}" data-word-audio-path="${word.audio_path || ''}" title="Озвучить слово">
-                                <span class="word-play-icon">▶</span>
-                                <span class="word-audio-time text-xs"></span>
-                            </button>
-                            <button class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded text-sm add-to-dict" data-word-id="${wordId}">
-                                Добавить в словарь
-                            </button>
-                        </div>
-                    `;
-                    
-                    // Показываем tooltip сначала невидимым, чтобы получить его размеры
-                    tooltip.classList.remove('hidden');
-                    tooltip.style.visibility = 'hidden';
-                    tooltip.style.display = 'block';
-                    
-                    const rect = this.getBoundingClientRect();
-                    const tooltipWidth = tooltip.offsetWidth;
-                    const tooltipHeight = tooltip.offsetHeight;
-                    
-                    // Позиционируем tooltip над словом, ближе к нему
-                    tooltip.style.left = rect.left + (rect.width / 2) - (tooltipWidth / 2) + 'px';
-                    tooltip.style.top = (rect.top - tooltipHeight - 5) + 'px';
-                    
-                    // Делаем tooltip видимым
-                    tooltip.style.visibility = 'visible';
-                }
-            });
+    // Кеш для слов из внешнего API
+    const wordCache = {};
+    
+    // Обработка выделения текста
+    let currentSelection = null;
+    
+    // Обработчик выделения текста
+    document.addEventListener('mouseup', function(e) {
+        // Не обрабатываем, если клик был на tooltip
+        if (e.target.closest('#word-tooltip')) {
+            return;
+        }
+        
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
+        
+        // Проверяем, что выделен японский текст
+        if (selectedText && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(selectedText)) {
+            // Ограничиваем длину выделенного текста (максимум 20 символов)
+            const text = selectedText.length > 20 ? selectedText.substring(0, 20) : selectedText;
+            currentSelection = text;
             
-            item.addEventListener('mouseleave', function() {
-                // Устанавливаем задержку перед скрытием
-                hideTooltipTimer = setTimeout(() => {
-                    // Скрываем только если курсор не на tooltip
-                    if (!isTooltipHovered) {
-                        hideTooltip();
+            // Показываем tooltip для выделенного текста
+            showWordTooltip(text, selection);
+        } else {
+            // Если выделение пустое или не японское, скрываем tooltip
+            hideTooltip();
+            currentSelection = null;
+        }
+    });
+    
+    // Обработка клика вне выделения
+    document.addEventListener('mousedown', function(e) {
+        if (!e.target.closest('#word-tooltip') && !e.target.closest('#story-content')) {
+            hideTooltip();
+            currentSelection = null;
+        }
+    });
+    
+    // Функция для проверки, является ли слово формой уже добавленного слова
+    function findBaseWordForForm(selectedForm) {
+        if (!wordsData || Object.keys(wordsData).length === 0) {
+            return null;
+        }
+        
+        // Проверяем все слова пользователя
+        for (const [id, word] of Object.entries(wordsData)) {
+            const wordJapanese = word.japanese || word.japanese_word;
+            const wordReading = word.reading || '';
+            const wordType = word.word_type || '';
+            
+            // Генерируем все формы слова
+            let wordForms = [{form: wordJapanese, reading: wordReading}];
+            
+            const wordTypeLower = wordType.toLowerCase();
+            const isVerb = wordTypeLower.includes('глагол') || wordTypeLower.includes('verb');
+            const isAdjective = wordTypeLower.includes('прилагательное') || 
+                               wordTypeLower.includes('adjective') || 
+                               wordTypeLower.includes('形容詞') ||
+                               (!isVerb && wordJapanese.endsWith('い') && wordJapanese.length > 1);
+            
+            if (isVerb) {
+                try {
+                    const forms = generateVerbForms(wordJapanese, wordReading);
+                    if (forms && forms.length > 0) {
+                        wordForms = forms;
                     }
-                }, 200);
-            });
-        });
+                } catch (error) {
+                    // Игнорируем ошибки
+                }
+            } else if (isAdjective) {
+                try {
+                    const forms = generateAdjectiveForms(wordJapanese, wordReading, wordType);
+                    if (forms && forms.length > 0) {
+                        wordForms = forms;
+                    }
+                } catch (error) {
+                    // Игнорируем ошибки
+                }
+            }
+            
+            // Проверяем, совпадает ли выделенная форма с какой-то формой слова
+            for (const formData of wordForms) {
+                const form = typeof formData === 'string' ? formData : formData.form;
+                const formReading = typeof formData === 'string' ? wordReading : (formData.reading || wordReading);
+                
+                if (form === selectedForm || formReading === selectedForm) {
+                    // Нашли совпадение - возвращаем базовое слово
+                    return {
+                        id: id,
+                        japanese: wordJapanese,
+                        reading: wordReading,
+                        translation_ru: word.translation_ru || '',
+                        translation_en: word.translation_en || '',
+                        word_type: wordType
+                    };
+                }
+            }
+        }
+        
+        return null;
     }
+    
+    // Функция для показа tooltip для выделенного слова
+    async function showWordTooltip(japaneseWord, selection) {
+        if (!japaneseWord) return;
+        
+        // Сбрасываем состояние tooltip
+        isTooltipHovered = false;
+        if (hideTooltipTimer) {
+            clearTimeout(hideTooltipTimer);
+            hideTooltipTimer = null;
+        }
+        
+        // Получаем позицию выделения
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        
+        // Показываем загрузку
+        tooltipContent.innerHTML = `
+            <div class="text-xl font-bold japanese-font mb-2">${japaneseWord}</div>
+            <div class="text-gray-400">Загрузка...</div>
+        `;
+        
+        // Показываем tooltip
+        tooltip.classList.remove('hidden');
+        tooltip.style.visibility = 'hidden';
+        tooltip.style.display = 'block';
+        
+        const tooltipWidth = tooltip.offsetWidth;
+        const tooltipHeight = tooltip.offsetHeight;
+        
+        // Позиционируем tooltip над выделенным текстом
+        tooltip.style.left = rect.left + (rect.width / 2) - (tooltipWidth / 2) + 'px';
+        tooltip.style.top = (rect.top - tooltipHeight - 5) + 'px';
+        
+        // Делаем tooltip видимым
+        tooltip.style.visibility = 'visible';
+        
+        // Сначала проверяем, не является ли выделенное слово формой уже добавленного слова
+        const baseWordFromDictionary = findBaseWordForForm(japaneseWord);
+        
+        let wordData = null;
+        let baseWordToAdd = japaneseWord; // Базовая форма для добавления в словарь
+        
+        if (baseWordFromDictionary) {
+            // Выделенное слово является формой уже добавленного слова
+            wordData = {
+                japanese: baseWordFromDictionary.japanese,
+                reading: baseWordFromDictionary.reading || '',
+                translation_ru: baseWordFromDictionary.translation_ru || '',
+                translation_en: baseWordFromDictionary.translation_en || '',
+                word_type: baseWordFromDictionary.word_type || ''
+            };
+            baseWordToAdd = baseWordFromDictionary.japanese;
+        } else {
+            // Проверяем кеш
+            if (wordCache[japaneseWord]) {
+                wordData = wordCache[japaneseWord];
+                baseWordToAdd = wordData.japanese; // Используем базовую форму из API
+            } else {
+                // Проверяем, есть ли слово в wordsData (для слов пользователя)
+                let foundWordId = null;
+                if (wordsData && Object.keys(wordsData).length > 0) {
+                    for (const [id, word] of Object.entries(wordsData)) {
+                        const wordJapanese = word.japanese || word.japanese_word;
+                        if (wordJapanese === japaneseWord || word.reading === japaneseWord) {
+                            foundWordId = id;
+                            const wordFromData = word;
+                            wordData = {
+                                japanese: wordFromData.japanese || wordFromData.japanese_word || japaneseWord,
+                                reading: wordFromData.reading || '',
+                                translation_ru: wordFromData.translation_ru || '',
+                                translation_en: wordFromData.translation_en || '',
+                                word_type: wordFromData.word_type || ''
+                            };
+                            baseWordToAdd = wordData.japanese;
+                            break;
+                        }
+                    }
+                }
+                
+                // Если не нашли в wordsData, запрашиваем из внешнего API
+                if (!wordData) {
+                    try {
+                        const response = await fetch(`{{ route("dictionary.lookup") }}?word=${encodeURIComponent(japaneseWord)}`, {
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            wordData = {
+                                japanese: data.japanese_word || japaneseWord,
+                                reading: data.reading || '',
+                                translation_ru: data.translation_ru || '',
+                                translation_en: data.translation_en || '',
+                                word_type: data.word_type || ''
+                            };
+                            
+                            // Проверяем, что API вернул базовую форму, а не форму
+                            // Если вернулась форма (заканчивается на ます, た, て, ない и т.д.), 
+                            // используем запрошенное слово как есть (API обычно возвращает базовую форму)
+                            // Но для уверенности проверяем, не является ли это формой
+                            const returnedWord = wordData.japanese;
+                            const isForm = returnedWord.endsWith('ます') || 
+                                          returnedWord.endsWith('ました') || 
+                                          returnedWord.endsWith('た') || 
+                                          returnedWord.endsWith('だ') ||
+                                          returnedWord.endsWith('て') || 
+                                          returnedWord.endsWith('で') ||
+                                          returnedWord.endsWith('ない') ||
+                                          returnedWord.endsWith('なかった');
+                            
+                            // Если API вернул форму, а не базовую, используем запрошенное слово
+                            // (хотя обычно API возвращает базовую форму)
+                            if (isForm && returnedWord !== japaneseWord) {
+                                // API вернул форму, но мы запросили форму - используем то, что вернул API
+                                // (обычно это базовая форма, но если нет, то используем как есть)
+                                baseWordToAdd = returnedWord;
+                            } else {
+                                // Используем базовую форму из API
+                                baseWordToAdd = returnedWord;
+                            }
+                            
+                            // Сохраняем в кеш
+                            wordCache[japaneseWord] = wordData;
+                        } else {
+                            // Если не найдено, создаем базовую структуру
+                            wordData = {
+                                japanese: japaneseWord,
+                                reading: '',
+                                translation_ru: 'Не найдено',
+                                translation_en: '',
+                                word_type: ''
+                            };
+                            baseWordToAdd = japaneseWord;
+                        }
+                    } catch (error) {
+                        console.error('Ошибка при запросе слова:', error);
+                        wordData = {
+                            japanese: japaneseWord,
+                            reading: '',
+                            translation_ru: 'Ошибка загрузки',
+                            translation_en: '',
+                            word_type: ''
+                        };
+                        baseWordToAdd = japaneseWord;
+                    }
+                }
+            }
+        }
+        
+        // Проверяем, добавлено ли базовое слово в словарь пользователя
+        let foundWordId = null;
+        
+        // Если нашли базовое слово из словаря, используем его ID
+        if (baseWordFromDictionary) {
+            foundWordId = baseWordFromDictionary.id;
+        } else if (wordsData && Object.keys(wordsData).length > 0) {
+            // Иначе ищем по базовой форме
+            for (const [id, word] of Object.entries(wordsData)) {
+                const wordJapanese = word.japanese || word.japanese_word;
+                if (wordJapanese === baseWordToAdd || word.reading === baseWordToAdd) {
+                    foundWordId = id;
+                    break;
+                }
+            }
+        }
+        
+        const isInDictionary = foundWordId && userWords.includes(parseInt(foundWordId));
+        
+        // Обновляем содержимое tooltip (всегда показываем базовую форму)
+        tooltipContent.innerHTML = `
+            <div class="text-xl font-bold japanese-font mb-2">${wordData.japanese}</div>
+            ${wordData.reading ? `<div class="text-gray-400 mb-2">${wordData.reading}</div>` : ''}
+            ${japaneseWord !== wordData.japanese ? `<div class="text-gray-500 text-sm mb-2">Выделено: ${japaneseWord}</div>` : ''}
+            ${wordData.translation_ru && wordData.translation_ru !== wordData.translation_en ? `<div class="text-gray-300 mb-1">${wordData.translation_ru}</div>` : ''}
+            ${wordData.translation_en ? `<div class="text-gray-400 text-sm mb-1">${wordData.translation_en}</div>` : ''}
+            ${!wordData.translation_ru || wordData.translation_ru === wordData.translation_en ? `<div class="text-gray-300 mb-1">${wordData.translation_en || 'Перевод не найден'}</div>` : ''}
+            <div class="mt-3 flex gap-2 items-center">
+                <button class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm speak-word-btn flex items-center gap-1" data-word-text="${escapeHtml(wordData.japanese)}" data-word-reading="${escapeHtml(wordData.reading || '')}" title="Озвучить слово">
+                    <span class="word-play-icon">▶</span>
+                </button>
+                ${!isInDictionary ? `
+                    <button class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded text-sm add-to-dict" data-japanese-word="${escapeHtml(baseWordToAdd)}" ${foundWordId ? `data-word-id="${foundWordId}"` : ''}>
+                        Добавить в словарь
+                    </button>
+                ` : `
+                    <button class="bg-gray-600 cursor-not-allowed text-white px-4 py-2 rounded text-sm" disabled>
+                        В словаре
+                    </button>
+                `}
+            </div>
+        `;
+        
+        // Обновляем размеры tooltip после загрузки данных
+        const newTooltipWidth = tooltip.offsetWidth;
+        const newTooltipHeight = tooltip.offsetHeight;
+        tooltip.style.left = rect.left + (rect.width / 2) - (newTooltipWidth / 2) + 'px';
+        tooltip.style.top = (rect.top - newTooltipHeight - 5) + 'px';
+    }
+    
+    // Функция attachWordEvents больше не нужна - используем выделение текста
     
     // Обработка добавления в словарь (делегирование событий)
     document.addEventListener('click', async function(e) {
@@ -1127,9 +1303,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const btn = e.target.classList.contains('add-to-dict') ? e.target : e.target.closest('.add-to-dict');
             const wordId = btn.dataset.wordId;
+            const japaneseWord = btn.dataset.japaneseWord;
             
-            // Проверяем, не добавлено ли уже слово
-            if (userWords.includes(parseInt(wordId))) {
+            if (!japaneseWord) {
+                alert('Ошибка: не указано слово');
                 return;
             }
             
@@ -1138,6 +1315,13 @@ document.addEventListener('DOMContentLoaded', function() {
             btn.textContent = 'Добавление...';
             
             try {
+                const requestBody = {};
+                if (wordId) {
+                    requestBody.word_id = wordId;
+                } else {
+                    requestBody.japanese_word = japaneseWord;
+                }
+                
                 const response = await fetch('{{ route("dictionary.add") }}', {
                     method: 'POST',
                     headers: {
@@ -1145,43 +1329,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         'X-CSRF-TOKEN': '{{ csrf_token() }}',
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ word_id: wordId })
+                    body: JSON.stringify(requestBody)
                 });
                 
                 const data = await response.json();
                 
+                console.log('Ответ от сервера:', data);
+                console.log('japaneseWord:', japaneseWord);
+                console.log('wordId из кнопки:', wordId);
+                
                 if (response.ok && data.success) {
-                    // Обновляем массив слов пользователя
-                    if (!userWords.includes(wordId)) {
-                        userWords.push(wordId);
-                    }
-                    
-                    // Обновляем прогресс (слово только что добавлено, значит не начато)
-                    wordProgress[wordId] = {
-                        days_studied: 0,
-                        is_completed: false
-                    };
-                    
-                    // Добавляем подсветку всем экземплярам слова
-                    document.querySelectorAll(`[data-word-id="${wordId}"]`).forEach(el => {
-                        // Удаляем все возможные классы подсветки
-                        el.classList.remove('word-highlight-not-started', 'word-highlight-beginner', 
-                                          'word-highlight-intermediate', 'word-highlight-advanced', 
-                                          'word-highlight-completed');
-                        // Добавляем правильный класс
-                        el.classList.add('word-highlight-not-started');
-                    });
-                    
-                    // Обновляем кнопку
-                    btn.textContent = 'В словаре';
-                    btn.disabled = true;
-                    btn.classList.remove('bg-purple-600', 'hover:bg-purple-700');
-                    btn.classList.add('bg-gray-600', 'cursor-not-allowed');
-                    
-                    // Добавляем в массив пользовательских слов
-                    if (!userWords.includes(parseInt(wordId))) {
-                        userWords.push(parseInt(wordId));
-                    }
+                    // После успешного добавления перезагружаем страницу для обновления подсветки
+                    location.reload();
                 } else {
                     // Восстанавливаем кнопку при ошибке
                     btn.disabled = false;
@@ -1209,7 +1368,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Обработанный контент length:', processedContent.length);
         
         storyContent.innerHTML = processedContent;
-        attachWordEvents();
+        // Используем выделение текста вместо наведения
     } catch (error) {
         console.error('Ошибка при обработке текста:', error);
         console.error('Stack trace:', error.stack);
@@ -1670,9 +1829,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateAudioPlayer();
             }
             // Останавливаем браузерную озвучку
-            if (speechSynthesis) {
-                speechSynthesis.cancel();
-            }
+            // Не отменяем speechSynthesis если он говорит слово (не рассказ)
+            // speechSynthesis.cancel() вызывается только для озвучивания рассказа
         });
     }
     
@@ -1946,9 +2104,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Останавливаем озвучку при уходе со страницы
     window.addEventListener('beforeunload', () => {
-        if (speechSynthesis && isSpeaking) {
-            speechSynthesis.cancel();
-        }
+        // Не отменяем speechSynthesis для слов, только для рассказа
+        // if (speechSynthesis && isSpeaking) {
+        //     speechSynthesis.cancel();
+        // }
         if (currentAudio) {
             currentAudio.pause();
         }
@@ -2043,12 +2202,161 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Если аудио нет, используем браузерную озвучку
         if ('speechSynthesis' in window) {
-            const utterance = new SpeechSynthesisUtterance(wordText || word.japanese);
-            utterance.lang = 'ja-JP';
-            if (selectedVoice) {
-                utterance.voice = selectedVoice;
+            // Используем reading если есть, иначе japanese
+            const textToSpeak = buttonElement.dataset.wordReading || wordText || word.japanese || '';
+            
+            if (!textToSpeak) {
+                console.warn('Нет текста для озвучивания');
+                return;
             }
-            speechSynthesis.speak(utterance);
+            
+            // Не отменяем сразу, даем время если что-то уже говорит
+            // Но для слов в рассказах отменяем только если это не слово
+            if (window.speechSynthesis.speaking) {
+                console.log('Уже идет озвучивание, отменяем для нового слова');
+                window.speechSynthesis.cancel();
+                // Даем время на отмену перед новым озвучиванием
+                setTimeout(() => {
+                    startSpeaking();
+                }, 150);
+            } else {
+                startSpeaking();
+            }
+            
+            function startSpeaking() {
+                const utterance = new SpeechSynthesisUtterance(textToSpeak);
+                utterance.lang = 'ja-JP';
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+            
+                // Функция для озвучивания с голосом
+                function speakWithVoice() {
+                    const voices = window.speechSynthesis.getVoices();
+                    if (voices.length > 0) {
+                        // Ищем японский голос
+                        const japaneseVoice = voices.find(v => v.lang.startsWith('ja')) || null;
+                        if (japaneseVoice) {
+                            // Проверяем, что голос действительно доступен
+                            if (japaneseVoice.localService === false) {
+                                console.warn('ВНИМАНИЕ: Голос не является локальным (localService: false). Возможно, голосовые файлы отсутствуют или повреждены.');
+                                console.warn('Попробуйте переустановить японские голоса Windows через:');
+                                console.warn('Параметры Windows → Время и язык → Язык → Добавить язык → Японский → Речь');
+                            }
+                            utterance.voice = japaneseVoice;
+                            console.log('Используем голос:', japaneseVoice.name, 'lang:', japaneseVoice.lang, 'localService:', japaneseVoice.localService);
+                        } else {
+                            console.error('Японский голос не найден!');
+                            console.warn('Для установки японских голосов:');
+                            console.warn('1. Параметры Windows → Время и язык → Язык');
+                            console.warn('2. Добавить язык → Японский');
+                            console.warn('3. После установки: Параметры → Речь → Добавить голос');
+                        }
+                    } else {
+                        console.error('Голоса не загружены! Возможно, они были удалены.');
+                        console.warn('Попробуйте перезагрузить страницу или переустановить голоса Windows.');
+                    }
+                    console.log('Начинаем озвучивание:', textToSpeak, {
+                        volume: utterance.volume,
+                        rate: utterance.rate,
+                        pitch: utterance.pitch,
+                        lang: utterance.lang,
+                        voice: utterance.voice ? utterance.voice.name : 'не установлен'
+                    });
+                    
+                    // Добавляем обработчики для отладки ПЕРЕД вызовом speak
+                    utterance.onstart = function(event) {
+                        console.log('Озвучивание началось', {
+                            charIndex: event.charIndex,
+                            elapsedTime: event.elapsedTime,
+                            name: event.name,
+                            voice: utterance.voice ? utterance.voice.name : 'не установлен'
+                        });
+                    };
+                    utterance.onerror = function(event) {
+                        console.error('Ошибка озвучивания:', {
+                            error: event.error,
+                            charIndex: event.charIndex,
+                            type: event.type,
+                            message: event.error === 'network' ? 'Проблема с сетью' : 
+                                     event.error === 'synthesis' ? 'Проблема синтеза' :
+                                     event.error === 'synthesis-unavailable' ? 'Синтез недоступен' :
+                                     event.error === 'audio-busy' ? 'Аудио занято' :
+                                     event.error === 'audio-hardware' ? 'Проблема с аудио-оборудованием' :
+                                     'Неизвестная ошибка'
+                        });
+                    };
+                    utterance.onend = function(event) {
+                        console.log('Озвучивание завершено', {
+                            charIndex: event.charIndex,
+                            elapsedTime: event.elapsedTime,
+                            name: event.name
+                        });
+                    };
+                    utterance.onpause = function(event) {
+                        console.log('Озвучивание приостановлено', event);
+                    };
+                    utterance.onresume = function(event) {
+                        console.log('Озвучивание возобновлено', event);
+                    };
+                    
+                    // Убеждаемся, что speechSynthesis не заблокирован
+                    try {
+                        // Отменяем любые текущие озвучивания перед новым
+                        if (window.speechSynthesis.speaking) {
+                            window.speechSynthesis.cancel();
+                            // Ждем немного перед новым озвучиванием
+                            setTimeout(() => {
+                                console.log('Запускаем speechSynthesis.speak для слова после отмены предыдущего');
+                                window.speechSynthesis.speak(utterance);
+                            }, 50);
+                        } else {
+                            console.log('Запускаем speechSynthesis.speak для слова');
+                            window.speechSynthesis.speak(utterance);
+                        }
+                    } catch (e) {
+                        console.error('Ошибка при вызове speak:', e);
+                        // Пробуем еще раз через небольшую задержку
+                        setTimeout(() => {
+                            try {
+                                window.speechSynthesis.speak(utterance);
+                            } catch (e2) {
+                                console.error('Повторная ошибка:', e2);
+                            }
+                        }, 100);
+                    }
+                }
+                
+                // Проверяем, загружены ли голоса
+                const voices = window.speechSynthesis.getVoices();
+                if (voices.length > 0) {
+                    speakWithVoice();
+                } else {
+                    console.log('Голоса еще не загружены, ждем...');
+                    // Ждем загрузки голосов
+                    const voicesHandler = function() {
+                        console.log('Голоса загружены');
+                        speakWithVoice();
+                        // Удаляем обработчик после первого использования
+                        window.speechSynthesis.onvoiceschanged = null;
+                    };
+                    window.speechSynthesis.onvoiceschanged = voicesHandler;
+                    
+                    // Таймаут на случай, если событие не сработает
+                    setTimeout(function() {
+                        if (window.speechSynthesis.getVoices().length > 0) {
+                            speakWithVoice();
+                        } else {
+                            console.warn('Голоса не загрузились, пробуем без голоса');
+                            try {
+                                window.speechSynthesis.speak(utterance);
+                            } catch (e) {
+                                console.error('Ошибка при озвучивании без голоса:', e);
+                            }
+                        }
+                    }, 1000);
+                }
+            }
         } else {
             alert('Озвучка не поддерживается в вашем браузере');
         }
@@ -2060,9 +2368,48 @@ document.addEventListener('DOMContentLoaded', function() {
         if (btn) {
             e.preventDefault();
             e.stopPropagation();
-            const wordId = parseInt(btn.dataset.wordId);
-            const wordText = btn.dataset.wordText;
-            await speakWord(wordId, wordText, btn);
+            
+            const wordId = btn.dataset.wordId ? parseInt(btn.dataset.wordId) : null;
+            const wordText = btn.dataset.wordText || '';
+            const wordReading = btn.dataset.wordReading || '';
+            
+            // Если есть wordId, используем функцию speakWord
+            if (wordId && wordsData[wordId]) {
+                await speakWord(wordId, wordText, btn);
+            } else {
+                // Если нет wordId (кнопка из tooltip), озвучиваем напрямую
+                const textToSpeak = wordReading || wordText;
+                
+                if (!textToSpeak) {
+                    console.warn('Нет текста для озвучивания');
+                    return;
+                }
+                
+                if ('speechSynthesis' in window) {
+                    // Отменяем предыдущее озвучивание
+                    if (window.speechSynthesis.speaking) {
+                        window.speechSynthesis.cancel();
+                    }
+                    
+                    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+                    utterance.lang = 'ja-JP';
+                    utterance.rate = 1.0;
+                    utterance.pitch = 1.0;
+                    utterance.volume = 1.0;
+                    
+                    // Выбираем японский голос
+                    const voices = window.speechSynthesis.getVoices();
+                    const japaneseVoice = voices.find(v => v.lang.startsWith('ja')) || null;
+                    if (japaneseVoice) {
+                        utterance.voice = japaneseVoice;
+                    }
+                    
+                    // Озвучиваем
+                    window.speechSynthesis.speak(utterance);
+                } else {
+                    alert('Озвучка не поддерживается в вашем браузере');
+                }
+            }
         }
     });
     

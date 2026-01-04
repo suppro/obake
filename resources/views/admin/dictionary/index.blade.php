@@ -47,7 +47,6 @@
                             <td class="px-6 py-4 text-gray-300">{{ Str::limit($word->translation_ru, 50) }}</td>
                             <td class="px-6 py-4 text-gray-400">{{ Str::limit($word->translation_en, 50) }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                <a href="{{ route('admin.dictionary.edit', $word->id) }}" class="text-blue-400 hover:text-blue-300 mr-3">Редактировать</a>
                                 <form method="POST" action="{{ route('admin.dictionary.destroy', $word->id) }}" class="inline" onsubmit="return confirm('Вы уверены?')">
                                     @csrf
                                     @method('DELETE')

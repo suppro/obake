@@ -19,6 +19,8 @@ class Kanji extends Model
         'description',
         'stroke_count',
         'is_active',
+        'image_path',
+        'mnemonic',
     ];
 
     protected $casts = [

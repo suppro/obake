@@ -59,55 +59,7 @@ class AdminDictionaryController extends Controller
         return redirect()->route('admin.dictionary.index')->with('success', 'Слово успешно добавлено');
     }
 
-    public function edit($id)
-    {
-        $word = GlobalDictionary::findOrFail($id);
-        return view('admin.dictionary.edit', compact('word'));
-    }
-
-    public function update(Request $request, $id)
-    {
-        $word = GlobalDictionary::findOrFail($id);
-
-        $validated = $request->validate([
-            'japanese_word' => ['required', 'string', 'max:255'],
-            'reading' => ['nullable', 'string', 'max:255'],
-            'translation_ru' => ['required', 'string'],
-            'translation_en' => ['required', 'string'],
-            'word_type' => ['nullable', 'string', 'max:255'],
-            'example_ru' => ['nullable', 'string'],
-            'example_jp' => ['nullable', 'string'],
-            'audio_file' => ['nullable', 'file', 'mimes:mp3', 'max:5120'], // Максимум 5MB
-            'remove_audio' => ['nullable', 'boolean'],
-        ]);
-
-        $word->update($validated);
-
-        // Удаляем аудио, если запрошено
-        if ($request->has('remove_audio') && $request->remove_audio) {
-            if ($word->audio_path && Storage::disk('public')->exists($word->audio_path)) {
-                Storage::disk('public')->delete($word->audio_path);
-            }
-            $word->audio_path = null;
-            $word->save();
-        }
-
-        // Обрабатываем загрузку нового аудио файла
-        if ($request->hasFile('audio_file')) {
-            // Удаляем старое аудио, если есть
-            if ($word->audio_path && Storage::disk('public')->exists($word->audio_path)) {
-                Storage::disk('public')->delete($word->audio_path);
-            }
-            
-            $audioFile = $request->file('audio_file');
-            $audioPath = 'audio/words/' . $word->id . '.mp3';
-            Storage::disk('public')->putFileAs('audio/words', $audioFile, $word->id . '.mp3');
-            $word->audio_path = $audioPath;
-            $word->save();
-        }
-
-        return redirect()->route('admin.dictionary.index')->with('success', 'Слово успешно обновлено');
-    }
+    // Методы edit и update убраны - редактирование доступно только в словаре пользователя
 
     public function destroy($id)
     {

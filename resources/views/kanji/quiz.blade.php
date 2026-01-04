@@ -30,11 +30,14 @@
     <!-- Вопрос -->
     <div id="quiz-container" class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-8 border border-gray-700 shadow-2xl">
         <div id="question-container" class="text-center mb-8">
+            <div id="question-image-container" class="mb-4 hidden">
+                <img id="question-image" src="" alt="Kanji image" class="max-w-xs mx-auto rounded-lg">
+            </div>
             <div class="text-6xl font-bold text-white mb-4" id="question-text" style="font-family: 'Noto Sans JP', sans-serif;"></div>
             <div class="text-xl text-gray-400" id="question-hint"></div>
         </div>
 
-        <div id="answers-container" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div id="answers-container" class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
             <!-- Варианты ответов будут добавлены через JavaScript -->
         </div>
 
@@ -123,12 +126,22 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             currentQuestion = data;
             
+            // Скрываем изображение по умолчанию
+            document.getElementById('question-image-container').classList.add('hidden');
+            
             if (data.question_type === 'kanji_to_ru') {
                 questionText.textContent = data.question;
                 questionHint.textContent = 'Выберите правильный перевод:';
             } else {
                 questionText.textContent = data.question;
                 questionHint.textContent = 'Выберите правильный кандзи:';
+                
+                // Показываем изображение только для вопросов типа ru_to_kanji
+                if (data.image_path) {
+                    const imageUrl = '{{ asset("storage") }}/' + data.image_path;
+                    document.getElementById('question-image').src = imageUrl;
+                    document.getElementById('question-image-container').classList.remove('hidden');
+                }
             }
             
             // Создаем кнопки с ответами

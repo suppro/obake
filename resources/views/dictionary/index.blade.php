@@ -67,11 +67,16 @@
                                 class="speak-word-btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition text-sm flex items-center gap-1"
                                 data-word-id="{{ $word->id }}"
                                 data-word-text="{{ $word->japanese_word }}"
-                                data-word-audio-path="{{ $word->audio_path }}"
+                                data-word-reading="{{ $word->reading ?? '' }}"
+                                data-word-audio-path="{{ $word->audio_path ?? '' }}"
                                 title="Озвучить слово">
                                 <span class="word-play-icon">▶</span>
                                 <span class="word-audio-time text-xs"></span>
                             </button>
+                            <a href="{{ route('dictionary.edit', $word->id) }}" 
+                               class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition text-sm">
+                                Редактировать
+                            </a>
                             @if(!$isCompleted)
                                 <button 
                                     type="button"
@@ -150,37 +155,230 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Обработка кнопок озвучки слов
-    const speakWordBtns = document.querySelectorAll('.speak-word-btn');
+    // Функция для получения японского голоса
+    let selectedVoice = null;
+    function selectBestJapaneseVoice() {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length === 0) return null;
+        
+        // Ищем нейронный голос Google (обычно лучший)
+        let neuralVoice = voices.find(v => 
+            v.lang.startsWith('ja') && 
+            (v.name.includes('Neural') || v.name.includes('Neural2'))
+        );
+        
+        if (neuralVoice) return neuralVoice;
+        
+        // Ищем любой японский голос женского пола
+        let femaleVoice = voices.find(v => 
+            v.lang.startsWith('ja') && 
+            (v.name.includes('Female') || v.name.includes('女') || v.name.includes('F'))
+        );
+        
+        if (femaleVoice) return femaleVoice;
+        
+        // Ищем любой японский голос
+        let japaneseVoice = voices.find(v => v.lang.startsWith('ja'));
+        
+        return japaneseVoice || null;
+    }
     
-    speakWordBtns.forEach(btn => {
-        btn.addEventListener('click', async function() {
-            const wordId = this.dataset.wordId;
-            const wordText = this.dataset.wordText;
-            const audioPath = this.dataset.wordAudioPath;
+    // Загружаем голоса
+    function loadVoices() {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+            selectedVoice = selectBestJapaneseVoice();
+            if (selectedVoice) {
+                console.log('Выбран голос:', selectedVoice.name, selectedVoice.lang);
+            }
+        }
+    }
+    
+    loadVoices();
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+        speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    
+    // Обработка кнопок озвучки слов (делегирование событий для динамических кнопок)
+    document.addEventListener('click', async function(e) {
+        const btn = e.target.closest('.speak-word-btn');
+        if (!btn) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const wordId = btn.dataset.wordId;
+        const wordText = btn.dataset.wordText;
+        const audioPath = btn.dataset.wordAudioPath;
+        
+        // Проверяем, есть ли сохраненное аудио
+        if (audioPath) {
+            try {
+                // Используем специальный маршрут для аудио с поддержкой Range-запросов
+                const audioUrl = '{{ url("/audio") }}/' + audioPath;
+                const audio = new Audio(audioUrl);
+                await audio.play();
+                return;
+            } catch (error) {
+                console.error('Ошибка воспроизведения аудио:', error);
+            }
+        }
+        
+        // Если аудио нет, используем браузерную озвучку
+        if ('speechSynthesis' in window) {
+            // Используем reading если есть, иначе japanese_word
+            const textToSpeak = btn.dataset.wordReading || wordText || '';
             
-            // Проверяем, есть ли сохраненное аудио
-            if (audioPath) {
-                try {
-                    // Используем специальный маршрут для аудио с поддержкой Range-запросов
-                    const audioUrl = '{{ url("/audio") }}/' + audioPath;
-                    const audio = new Audio(audioUrl);
-                    await audio.play();
-                    return;
-                } catch (error) {
-                    console.error('Ошибка воспроизведения аудио:', error);
+            if (!textToSpeak) {
+                console.warn('Нет текста для озвучивания');
+                return;
+            }
+            
+            // Отменяем предыдущее озвучивание перед новым
+            if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+                console.log('Уже идет озвучивание, отменяем для нового слова');
+                window.speechSynthesis.cancel();
+                // Даем время на отмену перед новым озвучиванием
+                setTimeout(() => {
+                    startSpeaking();
+                }, 100);
+            } else {
+                startSpeaking();
+            }
+            
+            function startSpeaking() {
+            
+                const utterance = new SpeechSynthesisUtterance(textToSpeak);
+                utterance.lang = 'ja-JP';
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+                
+                // Функция для озвучивания с голосом
+                function speakWithVoice() {
+                    const voices = window.speechSynthesis.getVoices();
+                    if (voices.length > 0) {
+                        // Ищем японский голос
+                        const japaneseVoice = voices.find(v => v.lang.startsWith('ja')) || null;
+                        if (japaneseVoice) {
+                            // Проверяем, что голос действительно доступен
+                            if (japaneseVoice.localService === false) {
+                                console.warn('ВНИМАНИЕ: Голос не является локальным (localService: false). Возможно, голосовые файлы отсутствуют или повреждены.');
+                                console.warn('Попробуйте переустановить японские голоса Windows через:');
+                                console.warn('Параметры Windows → Время и язык → Язык → Добавить язык → Японский → Речь');
+                            }
+                            utterance.voice = japaneseVoice;
+                            console.log('Используем голос:', japaneseVoice.name, 'lang:', japaneseVoice.lang, 'localService:', japaneseVoice.localService);
+                        } else {
+                            console.error('Японский голос не найден!');
+                            console.warn('Для установки японских голосов:');
+                            console.warn('1. Параметры Windows → Время и язык → Язык');
+                            console.warn('2. Добавить язык → Японский');
+                            console.warn('3. После установки: Параметры → Речь → Добавить голос');
+                        }
+                    } else {
+                        console.error('Голоса не загружены! Возможно, они были удалены.');
+                        console.warn('Попробуйте перезагрузить страницу или переустановить голоса Windows.');
+                    }
+                        console.log('Начинаем озвучивание:', textToSpeak, 'volume:', utterance.volume);
+                    
+                    // Добавляем обработчики для отладки ПЕРЕД вызовом speak
+                    utterance.onstart = function(event) {
+                        console.log('Озвучивание началось', {
+                            charIndex: event.charIndex,
+                            elapsedTime: event.elapsedTime,
+                            name: event.name,
+                            voice: utterance.voice ? utterance.voice.name : 'не установлен'
+                        });
+                    };
+                    utterance.onerror = function(event) {
+                        console.error('Ошибка озвучивания:', {
+                            error: event.error,
+                            charIndex: event.charIndex,
+                            type: event.type,
+                            message: event.error === 'network' ? 'Проблема с сетью' : 
+                                     event.error === 'synthesis' ? 'Проблема синтеза' :
+                                     event.error === 'synthesis-unavailable' ? 'Синтез недоступен' :
+                                     event.error === 'audio-busy' ? 'Аудио занято' :
+                                     event.error === 'audio-hardware' ? 'Проблема с аудио-оборудованием' :
+                                     'Неизвестная ошибка'
+                        });
+                    };
+                    utterance.onend = function(event) {
+                        console.log('Озвучивание завершено', {
+                            charIndex: event.charIndex,
+                            elapsedTime: event.elapsedTime,
+                            name: event.name
+                        });
+                    };
+                    utterance.onpause = function(event) {
+                        console.log('Озвучивание приостановлено', event);
+                    };
+                    utterance.onresume = function(event) {
+                        console.log('Озвучивание возобновлено', event);
+                    };
+                    
+                    // Убеждаемся, что speechSynthesis не заблокирован
+                    // Некоторые браузеры требуют user interaction
+                    try {
+                        // Отменяем любые текущие озвучивания перед новым
+                        if (window.speechSynthesis.speaking) {
+                            window.speechSynthesis.cancel();
+                            // Ждем немного перед новым озвучиванием
+                            setTimeout(() => {
+                                console.log('Запускаем speechSynthesis.speak после отмены предыдущего');
+                                window.speechSynthesis.speak(utterance);
+                            }, 50);
+                        } else {
+                            console.log('Запускаем speechSynthesis.speak');
+                            window.speechSynthesis.speak(utterance);
+                        }
+                    } catch (e) {
+                        console.error('Ошибка при вызове speak:', e);
+                        // Пробуем еще раз через небольшую задержку
+                        setTimeout(() => {
+                            try {
+                                window.speechSynthesis.speak(utterance);
+                            } catch (e2) {
+                                console.error('Повторная ошибка:', e2);
+                            }
+                        }, 100);
+                    }
+                }
+                
+                // Проверяем, загружены ли голоса
+                const voices = window.speechSynthesis.getVoices();
+                if (voices.length > 0) {
+                    speakWithVoice();
+                } else {
+                    console.log('Голоса еще не загружены, ждем...');
+                    // Ждем загрузки голосов
+                    const voicesHandler = function() {
+                        console.log('Голоса загружены');
+                        speakWithVoice();
+                        // Удаляем обработчик после первого использования
+                        window.speechSynthesis.onvoiceschanged = null;
+                    };
+                    window.speechSynthesis.onvoiceschanged = voicesHandler;
+                    
+                    // Таймаут на случай, если событие не сработает
+                    setTimeout(function() {
+                        if (window.speechSynthesis.getVoices().length > 0) {
+                            speakWithVoice();
+                        } else {
+                            console.warn('Голоса не загрузились, пробуем без голоса');
+                            try {
+                                window.speechSynthesis.speak(utterance);
+                            } catch (e) {
+                                console.error('Ошибка при озвучивании без голоса:', e);
+                            }
+                        }
+                    }, 1000);
                 }
             }
-            
-            // Если аудио нет, используем браузерную озвучку
-            if ('speechSynthesis' in window) {
-                const utterance = new SpeechSynthesisUtterance(wordText);
-                utterance.lang = 'ja-JP';
-                window.speechSynthesis.speak(utterance);
-            } else {
-                alert('Озвучка не поддерживается в вашем браузере');
-            }
-        });
+        } else {
+            alert('Озвучка не поддерживается в вашем браузере');
+        }
     });
 });
 </script>

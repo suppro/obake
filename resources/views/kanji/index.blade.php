@@ -65,33 +65,264 @@
                     @endif
                     <span class="text-sm font-normal text-gray-400">({{ $kanjiList->count() }} кандзи)</span>
                 </h2>
-                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                    @foreach($kanjiList as $item)
-                        <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hover:border-purple-500 transition-all hover:shadow-lg hover:shadow-purple-500/20">
-                            <div class="text-center mb-2">
-                                <div class="text-4xl font-bold text-white mb-1">{{ $item['kanji'] }}</div>
-                                <div class="text-sm text-gray-400">{{ $item['translation'] }}</div>
-                            </div>
-                            <div class="mt-3">
-                                <div class="flex items-center justify-between mb-1">
-                                    <span class="text-xs text-gray-400">Уровень:</span>
-                                    <span class="text-sm font-semibold text-purple-300">{{ $item['level'] }}/10</span>
-                                </div>
-                                <div class="w-full bg-gray-600 rounded-full h-2">
-                                    <div class="bg-gradient-to-r from-purple-500 to-indigo-500 h-2 rounded-full transition-all" 
-                                         style="width: {{ ($item['level'] / 10) * 100 }}%"></div>
-                                </div>
-                                @if($item['last_reviewed_at'])
-                                    <div class="text-xs text-gray-500 mt-2">
-                                        Последний раз: {{ $item['last_reviewed_at']->format('d.m.Y') }}
-                                    </div>
-                                @endif
-                            </div>
-                        </div>
-                    @endforeach
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse">
+                        <tbody>
+                            @php
+                                $chunkSize = 10; // Количество кандзи в строке
+                                $chunks = $kanjiList->chunk($chunkSize);
+                            @endphp
+                            @foreach($chunks as $chunk)
+                                <tr>
+                                    @foreach($chunk as $item)
+                                        <td class="kanji-item bg-gray-700/50 border border-gray-600 hover:border-purple-500 transition-all hover:shadow-lg hover:shadow-purple-500/20 cursor-pointer text-center p-4 align-middle"
+                                            data-kanji="{{ $item['kanji'] }}"
+                                            data-translation="{{ htmlspecialchars($item['translation'], ENT_QUOTES, 'UTF-8') }}"
+                                            data-level="{{ $item['level'] }}"
+                                            data-last-reviewed="{{ $item['last_reviewed_at'] ? $item['last_reviewed_at']->format('d.m.Y') : '' }}"
+                                            data-is-completed="{{ $item['is_completed'] ? '1' : '0' }}"
+                                            data-image-path="{{ $item['image_path'] ?? '' }}"
+                                            data-mnemonic="{{ htmlspecialchars($item['mnemonic'] ?? '', ENT_QUOTES, 'UTF-8') }}"
+                                            onclick="openKanjiModal(this)">
+                                            <div class="text-6xl font-bold text-white" style="font-family: 'Noto Sans JP', sans-serif;">{{ $item['kanji'] }}</div>
+                                        </td>
+                                    @endforeach
+                                    @for($i = $chunk->count(); $i < $chunkSize; $i++)
+                                        <td class="border border-transparent p-4"></td>
+                                    @endfor
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
                 </div>
             </div>
         @endforeach
     </div>
 </div>
+
+<!-- Модальное окно с деталями кандзи -->
+<div id="kanji-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 9999;">
+    <div class="flex items-center justify-center min-h-screen p-4" style="position: relative; z-index: 10000;">
+    <div class="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-2xl font-bold text-purple-400" id="modal-kanji" style="font-family: 'Noto Sans JP', sans-serif;"></h3>
+            <button id="close-modal" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+        </div>
+        
+        <div id="modal-image" class="mb-4 hidden">
+            <img src="" alt="Kanji image" class="w-full rounded-lg" id="modal-image-src">
+        </div>
+        
+        <div class="mb-4">
+            <div class="text-gray-300 mb-2">
+                <span class="text-gray-400">Перевод:</span> <span id="modal-translation" class="font-semibold"></span>
+            </div>
+            <div class="text-gray-300 mb-2">
+                <span class="text-gray-400">Уровень знания:</span> <span id="modal-level" class="font-semibold text-purple-300"></span>
+            </div>
+            <div class="text-gray-300 mb-2" id="modal-last-reviewed-container">
+                <span class="text-gray-400">Последнее повторение:</span> <span id="modal-last-reviewed" class="font-semibold"></span>
+            </div>
+            <div class="text-gray-300 mb-2" id="modal-mnemonic-container">
+                <span class="text-gray-400">Мнемоническая подсказка:</span>
+                <div id="modal-mnemonic" class="mt-1 text-sm"></div>
+            </div>
+        </div>
+        
+        <div class="flex gap-2">
+            <button id="mark-completed-btn" class="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition">
+                Отметить как изученное
+            </button>
+        </div>
+    </div>
+    </div>
+</div>
+
+@push('scripts')
+<script>
+let currentKanji = null;
+
+function openKanjiModal(kanjiItem) {
+    console.log('openKanjiModal вызвана', kanjiItem);
+    const modal = document.getElementById('kanji-modal');
+    const markCompletedBtn = document.getElementById('mark-completed-btn');
+    
+    if (!kanjiItem) {
+        console.error('kanjiItem не передан');
+        return;
+    }
+    
+    if (!modal) {
+        console.error('Модальное окно не найдено в DOM');
+        return;
+    }
+    
+    currentKanji = kanjiItem.getAttribute('data-kanji') || kanjiItem.dataset.kanji;
+    
+    if (!currentKanji) {
+        console.error('Кандзи не найден в data-атрибуте', kanjiItem, kanjiItem.dataset);
+        return;
+    }
+    
+    console.log('Открываем модальное окно для кандзи:', currentKanji);
+        
+        // Заполняем модальное окно
+        const kanjiEl = document.getElementById('modal-kanji');
+        const translationEl = document.getElementById('modal-translation');
+        const levelEl = document.getElementById('modal-level');
+        const lastReviewedEl = document.getElementById('modal-last-reviewed');
+        const lastReviewedContainer = document.getElementById('modal-last-reviewed-container');
+        const imageEl = document.getElementById('modal-image');
+        const imageSrcEl = document.getElementById('modal-image-src');
+        const mnemonicEl = document.getElementById('modal-mnemonic');
+        const mnemonicContainer = document.getElementById('modal-mnemonic-container');
+        
+        // Получаем данные из атрибутов
+        const translation = kanjiItem.getAttribute('data-translation') || kanjiItem.dataset.translation || '';
+        const level = kanjiItem.getAttribute('data-level') || kanjiItem.dataset.level || '0';
+        const lastReviewed = kanjiItem.getAttribute('data-last-reviewed') || kanjiItem.dataset.lastReviewed || '';
+        const imagePath = kanjiItem.getAttribute('data-image-path') || kanjiItem.dataset.imagePath || '';
+        const mnemonic = kanjiItem.getAttribute('data-mnemonic') || kanjiItem.dataset.mnemonic || '';
+        const isCompleted = kanjiItem.getAttribute('data-is-completed') || kanjiItem.dataset.isCompleted || '0';
+        
+        if (kanjiEl) kanjiEl.textContent = currentKanji;
+        if (translationEl) translationEl.textContent = translation;
+        if (levelEl) levelEl.textContent = level + '/10';
+        
+        // Последнее повторение
+        if (lastReviewed && lastReviewed.trim() !== '') {
+            if (lastReviewedEl) lastReviewedEl.textContent = lastReviewed;
+            if (lastReviewedContainer) lastReviewedContainer.classList.remove('hidden');
+        } else {
+            if (lastReviewedContainer) lastReviewedContainer.classList.add('hidden');
+        }
+        
+        // Изображение
+        if (imagePath && imagePath.trim() !== '') {
+            if (imageSrcEl) imageSrcEl.src = '{{ asset("storage") }}/' + imagePath;
+            if (imageEl) imageEl.classList.remove('hidden');
+        } else {
+            if (imageEl) imageEl.classList.add('hidden');
+        }
+        
+        // Мнемоника
+        if (mnemonic && mnemonic.trim() !== '') {
+            if (mnemonicEl) mnemonicEl.textContent = mnemonic;
+            if (mnemonicContainer) mnemonicContainer.classList.remove('hidden');
+        } else {
+            if (mnemonicContainer) mnemonicContainer.classList.add('hidden');
+        }
+        
+        // Кнопка отметки
+        if (isCompleted === '1') {
+            if (markCompletedBtn) {
+                markCompletedBtn.textContent = 'Изучено';
+                markCompletedBtn.disabled = true;
+                markCompletedBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        } else {
+            if (markCompletedBtn) {
+                markCompletedBtn.textContent = 'Отметить как изученное';
+                markCompletedBtn.disabled = false;
+                markCompletedBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+        
+    // Показываем модальное окно
+    if (modal) {
+        // Принудительно устанавливаем все стили через setProperty с important
+        modal.style.setProperty('display', 'flex', 'important');
+        modal.style.setProperty('visibility', 'visible', 'important');
+        modal.style.setProperty('opacity', '1', 'important');
+        modal.style.setProperty('z-index', '9999', 'important');
+        modal.style.setProperty('position', 'fixed', 'important');
+        modal.style.setProperty('top', '0', 'important');
+        modal.style.setProperty('left', '0', 'important');
+        modal.style.setProperty('right', '0', 'important');
+        modal.style.setProperty('bottom', '0', 'important');
+        modal.style.setProperty('background-color', 'rgba(0, 0, 0, 0.5)', 'important');
+        
+        console.log('Модальное окно должно быть видимым', {
+            display: modal.style.display,
+            computed: window.getComputedStyle(modal).display,
+            visibility: modal.style.visibility,
+            zIndex: modal.style.zIndex
+        });
+    } else {
+        console.error('Модальное окно не найдено');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('kanji-modal');
+    const closeModal = document.getElementById('close-modal');
+    const markCompletedBtn = document.getElementById('mark-completed-btn');
+    
+    if (closeModal) {
+        closeModal.addEventListener('click', function() {
+            if (modal) {
+                modal.style.setProperty('display', 'none', 'important');
+            }
+        });
+    }
+    
+    if (modal) {
+        // Закрываем при клике на фон
+        modal.addEventListener('click', function(e) {
+            // Проверяем, что клик был именно на фон, а не на содержимое
+            if (e.target === modal) {
+                modal.style.setProperty('display', 'none', 'important');
+            }
+        });
+        
+        // Предотвращаем закрытие при клике на содержимое
+        const modalContent = modal.querySelector('.bg-gray-800');
+        if (modalContent) {
+            modalContent.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+        }
+    }
+    
+    if (markCompletedBtn) {
+        markCompletedBtn.addEventListener('click', function() {
+            if (!currentKanji) return;
+            
+            this.disabled = true;
+            this.textContent = 'Отмечаю...';
+            
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+            
+            fetch('{{ route("kanji.mark-completed") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    kanji: currentKanji
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.error || 'Ошибка при отметке кандзи');
+                    this.disabled = false;
+                    this.textContent = 'Отметить как изученное';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Ошибка при отметке кандзи');
+                this.disabled = false;
+                this.textContent = 'Отметить как изученное';
+            });
+        });
+    }
+});
+</script>
+@endpush
 @endsection
