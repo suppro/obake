@@ -34,6 +34,17 @@
             </div>
             
             <div class="mb-6">
+                <label for="alternative_translations" class="block text-gray-300 mb-2">Альтернативные переводы (синонимы)</label>
+                <textarea name="alternative_translations" id="alternative_translations" rows="2"
+                       class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                       placeholder="теперь, в данный момент, ныне (через запятую, точку с запятой или с новой строки)">{{ old('alternative_translations') }}</textarea>
+                <p class="mt-1 text-sm text-gray-400">Укажите синонимы или альтернативные переводы, которые также будут приниматься как правильные ответы в квизе.</p>
+                @error('alternative_translations')
+                    <p class="mt-1 text-sm text-red-400">{{ $message }}</p>
+                @enderror
+            </div>
+            
+            <div class="mb-6">
                 <label for="jlpt_level" class="block text-gray-300 mb-2">Уровень JLPT</label>
                 <select name="jlpt_level" id="jlpt_level"
                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">

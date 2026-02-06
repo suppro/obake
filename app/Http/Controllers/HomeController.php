@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\WordRepetition;
+use App\Models\KanjiStudyProgress;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -28,15 +29,54 @@ class HomeController extends Controller
         $startDate = Carbon::create($selectedYear, 1, 1)->startOfDay();
         $endDate = Carbon::create($selectedYear, 12, 31)->startOfDay(); // Используем startOfDay для корректного сравнения
         
-        // Получаем даты, когда пользователь занимался в выбранном году
-        $repetitionDates = WordRepetition::where('user_id', $user->id)
+        // Получаем даты, когда пользователь занимался словами в выбранном году
+        $wordRepetitions = WordRepetition::where('user_id', $user->id)
             ->whereBetween('repetition_date', [$startDate, $endDate])
             ->select('repetition_date', DB::raw('COUNT(*) as count'))
             ->groupBy('repetition_date')
             ->get()
-            ->keyBy(function($item) {
-                return $item->repetition_date->format('Y-m-d');
+            ->mapWithKeys(function($item) {
+                return [$item->repetition_date->format('Y-m-d') => (object)[
+                    'repetition_date' => $item->repetition_date,
+                    'count' => $item->count
+                ]];
             });
+        
+        // Получаем даты, когда пользователь изучал кандзи в выбранном году
+        // Используем last_reviewed_at как дату активности
+        // Считаем количество уникальных кандзи, изученных в каждый день
+        $kanjiRepetitions = KanjiStudyProgress::where('user_id', $user->id)
+            ->whereNotNull('last_reviewed_at')
+            ->whereRaw('DATE(last_reviewed_at) >= ?', [$startDate->format('Y-m-d')])
+            ->whereRaw('DATE(last_reviewed_at) <= ?', [$endDate->format('Y-m-d')])
+            ->selectRaw('DATE(last_reviewed_at) as activity_date, COUNT(*) as count')
+            ->groupBy(DB::raw('DATE(last_reviewed_at)'))
+            ->get()
+            ->mapWithKeys(function($item) {
+                return [$item->activity_date => (object)[
+                    'repetition_date' => Carbon::parse($item->activity_date),
+                    'count' => $item->count
+                ]];
+            });
+        
+        // Объединяем данные из слов и кандзи
+        // Создаем коллекцию со всеми уникальными датами
+        $allDateKeys = $wordRepetitions->keys()->merge($kanjiRepetitions->keys())->unique();
+        
+        $repetitionDates = $allDateKeys->mapWithKeys(function($dateKey) use ($wordRepetitions, $kanjiRepetitions) {
+            $wordCount = isset($wordRepetitions[$dateKey]) ? $wordRepetitions[$dateKey]->count : 0;
+            $kanjiCount = isset($kanjiRepetitions[$dateKey]) ? $kanjiRepetitions[$dateKey]->count : 0;
+            
+            // Используем дату из слова или кандзи (они должны совпадать для одного дня)
+            $date = isset($wordRepetitions[$dateKey]) 
+                ? $wordRepetitions[$dateKey]->repetition_date 
+                : $kanjiRepetitions[$dateKey]->repetition_date;
+            
+            return [$dateKey => (object)[
+                'repetition_date' => $date,
+                'count' => $wordCount + $kanjiCount
+            ]];
+        });
         
         // Получаем первый день года и определяем, с какого дня недели начинается год
         $firstDayOfYear = $startDate->copy();

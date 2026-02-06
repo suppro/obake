@@ -16,6 +16,7 @@ class Kanji extends Model
         'kanji',
         'reading',
         'translation_ru',
+        'alternative_translations',
         'jlpt_level',
         'description',
         'stroke_count',

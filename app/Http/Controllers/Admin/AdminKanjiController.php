@@ -36,6 +36,7 @@ class AdminKanjiController extends Controller
         $validated = $request->validate([
             'kanji' => ['required', 'string', 'max:10', 'unique:kanji,kanji'],
             'translation_ru' => ['required', 'string', 'max:255'],
+            'alternative_translations' => ['nullable', 'string'],
             'jlpt_level' => ['nullable', 'integer', 'in:1,2,3,4,5'],
             'description' => ['nullable', 'string'],
             'stroke_count' => ['nullable', 'integer', 'min:1', 'max:50'],
@@ -60,6 +61,7 @@ class AdminKanjiController extends Controller
         $validated = $request->validate([
             'kanji' => ['required', 'string', 'max:10', 'unique:kanji,kanji,' . $id],
             'translation_ru' => ['required', 'string', 'max:255'],
+            'alternative_translations' => ['nullable', 'string'],
             'jlpt_level' => ['nullable', 'integer', 'in:1,2,3,4,5'],
             'description' => ['nullable', 'string'],
             'stroke_count' => ['nullable', 'integer', 'min:1', 'max:50'],

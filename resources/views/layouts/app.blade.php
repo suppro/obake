@@ -43,6 +43,7 @@
                             <a href="{{ route('dictionary.index') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Мой словарь</a>
                             <a href="{{ route('study.index') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Изучение</a>
                             <a href="{{ route('kanji.index') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Кандзи</a>
+                            <a href="{{ route('conjugation.index') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Спряжения</a>
                             
                             @if(auth()->user()->isAdmin())
                                 <a href="{{ route('admin.dashboard') }}" class="px-4 py-2 text-purple-400 hover:text-purple-300 transition">Админ</a>
@@ -92,6 +93,106 @@
         </footer>
     </div>
 
+    <!-- Глобальная функция выбора японского TTS голоса (приоритет Google Japanese) -->
+    <script>
+        // Глобальная переменная для хранения выбранного японского голоса
+        window.japaneseVoice = null;
+        
+        /**
+         * Выбирает лучший японский голос из доступных
+         * Приоритет: Google Japanese (ja-JP) > любой ja-JP neural/premium > любой японский
+         */
+        window.selectBestJapaneseVoice = function() {
+            if (!window.speechSynthesis) return null;
+            
+            const voices = window.speechSynthesis.getVoices();
+            if (!voices || voices.length === 0) return null;
+            
+            // 1. Приоритет: Google Japanese (точное совпадение)
+            let googleVoice = voices.find(v => 
+                v.lang === 'ja-JP' && 
+                (v.name.includes('Google') || v.name.includes('google'))
+            );
+            if (googleVoice) {
+                console.log('✅ Выбран голос:', googleVoice.name, googleVoice.lang);
+                return googleVoice;
+            }
+            
+            // 2. Ищем японский голос с "neural", "premium" или "enhanced" (обычно качественнее)
+            let neuralVoice = voices.find(v => 
+                v.lang.startsWith('ja') && 
+                (v.name.toLowerCase().includes('neural') || 
+                 v.name.toLowerCase().includes('premium') || 
+                 v.name.toLowerCase().includes('enhanced') ||
+                 v.name.includes('Microsoft'))
+            );
+            if (neuralVoice) {
+                console.log('✅ Выбран голос:', neuralVoice.name, neuralVoice.lang);
+                return neuralVoice;
+            }
+            
+            // 3. Ищем любой японский голос женского пола (обычно звучат лучше)
+            let femaleVoice = voices.find(v => 
+                v.lang.startsWith('ja') && 
+                (v.name.includes('Female') || v.name.includes('女') || v.name.includes('F'))
+            );
+            if (femaleVoice) {
+                console.log('✅ Выбран голос:', femaleVoice.name, femaleVoice.lang);
+                return femaleVoice;
+            }
+            
+            // 4. Ищем любой японский голос
+            let japaneseVoice = voices.find(v => v.lang.startsWith('ja'));
+            if (japaneseVoice) {
+                console.log('✅ Выбран голос:', japaneseVoice.name, japaneseVoice.lang);
+                return japaneseVoice;
+            }
+            
+            console.warn('⚠️ Японский голос не найден, будет использован голос по умолчанию');
+            return null;
+        };
+        
+        /**
+         * Универсальная функция озвучки текста на японском
+         * @param {string} text - текст для озвучки
+         * @param {function} onEnd - колбэк после завершения (опционально)
+         */
+        window.speakJapanese = function(text, onEnd) {
+            if (!window.speechSynthesis || !text) return;
+            
+            // Отменяем предыдущую озвучку
+            window.speechSynthesis.cancel();
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ja-JP';
+            utterance.rate = 0.9; // Немного медленнее для лучшего восприятия
+            
+            // Используем выбранный голос
+            if (window.japaneseVoice) {
+                utterance.voice = window.japaneseVoice;
+            }
+            
+            if (onEnd && typeof onEnd === 'function') {
+                utterance.onend = onEnd;
+            }
+            
+            window.speechSynthesis.speak(utterance);
+        };
+        
+        // Загружаем голоса при загрузке страницы
+        function loadJapaneseVoice() {
+            window.japaneseVoice = window.selectBestJapaneseVoice();
+        }
+        
+        // Загружаем сразу
+        loadJapaneseVoice();
+        
+        // И при изменении списка голосов (нужно для некоторых браузеров)
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+            window.speechSynthesis.onvoiceschanged = loadJapaneseVoice;
+        }
+    </script>
+    
     @stack('scripts')
     
     <!-- Service Worker Registration for PWA -->

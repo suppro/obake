@@ -13,6 +13,9 @@
             @else
                 (любой уровень)
             @endif
+            @if($forceInputMode ?? false)
+                <span class="inline-block ml-2 bg-purple-600 text-white px-2 py-1 rounded text-xs">✍️ Только ручной ввод</span>
+            @endif
         </p>
     </div>
 
@@ -47,10 +50,49 @@
             <!-- Варианты ответов будут добавлены через JavaScript -->
         </div>
 
+        <!-- Ручной ввод (режим после 5/10) -->
+        <div id="input-container" class="hidden mb-6">
+            <div class="flex flex-col sm:flex-row gap-3 items-stretch">
+                <input id="answer-input"
+                       type="text"
+                       class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                       placeholder="Введите ответ..."
+                       autocomplete="off"
+                       autocapitalize="off"
+                       spellcheck="false" />
+                <button id="submit-input"
+                        class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-3 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50">
+                    Проверить
+                </button>
+            </div>
+            <div class="text-gray-400 text-sm mt-2" id="input-hint"></div>
+        </div>
+
         <div id="result-container" class="hidden text-center">
             <div id="result-icon" class="text-6xl mb-4"></div>
             <div id="result-text" class="text-2xl font-bold mb-4"></div>
             <div id="result-level" class="text-gray-400 mb-6"></div>
+
+            <!-- Детали после ответа -->
+            <div id="after-answer-details" class="hidden text-left max-w-2xl mx-auto mb-6">
+                <div class="bg-gray-800/50 rounded-lg p-4 border border-gray-700 mb-3 hidden" id="after-reading-container">
+                    <div class="flex items-center justify-between gap-3">
+                        <div>
+                            <div class="text-gray-400 text-sm mb-1">Чтение</div>
+                            <div class="text-white text-lg font-semibold" id="after-reading"></div>
+                        </div>
+                        <button id="speak-reading"
+                                class="bg-blue-700 hover:bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg transition-all">
+                            🔊 Озвучить
+                        </button>
+                    </div>
+                </div>
+                <div class="bg-gray-800/50 rounded-lg p-4 border border-gray-700 hidden" id="after-examples-container">
+                    <div class="text-gray-400 text-sm mb-2">Примеры слов</div>
+                    <div class="text-gray-200 text-sm leading-relaxed whitespace-pre-line" id="after-examples"></div>
+                </div>
+            </div>
+
             <button id="next-button" 
                     class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-8 py-3 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50 transform hover:scale-105">
                 Следующий вопрос →
@@ -107,11 +149,22 @@ document.addEventListener('DOMContentLoaded', function() {
     const finishContainer = document.getElementById('finish-container');
     const progressBar = document.getElementById('progress-bar');
     const progressText = document.getElementById('progress-text');
+    const inputContainer = document.getElementById('input-container');
+    const answerInput = document.getElementById('answer-input');
+    const submitInputBtn = document.getElementById('submit-input');
+    const inputHint = document.getElementById('input-hint');
+    const afterAnswerDetails = document.getElementById('after-answer-details');
+    const afterReadingContainer = document.getElementById('after-reading-container');
+    const afterReading = document.getElementById('after-reading');
+    const speakReadingBtn = document.getElementById('speak-reading');
+    const afterExamplesContainer = document.getElementById('after-examples-container');
+    const afterExamples = document.getElementById('after-examples');
     
     let currentQuestion = null;
     let answeredCount = 0;
     const totalCount = {{ $count }};
     let answered = false;
+    const quizId = '{{ $quizId }}';
     const hintContainer = document.getElementById('hint-container');
     const hintButton = document.getElementById('hint-button');
     const hintText = document.getElementById('hint-text');
@@ -125,6 +178,11 @@ document.addEventListener('DOMContentLoaded', function() {
         resultContainer.classList.add('hidden');
         answersContainer.innerHTML = '';
         answersContainer.classList.remove('hidden');
+        inputContainer.classList.add('hidden');
+        if (answerInput) answerInput.value = '';
+        if (answerInput) answerInput.disabled = false;
+        if (submitInputBtn) submitInputBtn.disabled = false;
+        if (afterAnswerDetails) afterAnswerDetails.classList.add('hidden');
         
         // Скрываем подсказку и изображение по умолчанию
         hintContainer.classList.add('hidden');
@@ -132,14 +190,26 @@ document.addEventListener('DOMContentLoaded', function() {
         hintButton.textContent = '💡 Показать подсказку';
         questionImageContainer.classList.add('hidden');
         
-        fetch(`{{ route('kanji.get-question') }}?count=${totalCount}&jlpt_level={{ $jlptLevel }}`, {
+        fetch(`{{ route('kanji.get-question') }}?count=${totalCount}&jlpt_level={{ $jlptLevel }}&force_input_mode={{ $forceInputMode ? '1' : '0' }}&quiz_id=${encodeURIComponent(quizId)}`, {
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
             }
         })
-        .then(response => response.json())
+        .then(async response => {
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok && !data.no_more_questions) {
+                throw new Error(data.error || 'Ошибка загрузки вопроса');
+            }
+            return data;
+        })
         .then(data => {
+            if (data && data.no_more_questions) {
+                // Если вопросов больше нет — завершаем квиз корректно
+                finishContainer.classList.remove('hidden');
+                document.getElementById('quiz-container')?.classList.add('opacity-90');
+                return;
+            }
             currentQuestion = data;
             
             if (data.question_type === 'kanji_to_ru') {
@@ -181,19 +251,36 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            // Создаем кнопки с ответами
-            data.answers.forEach((answer, index) => {
-                const button = document.createElement('button');
-                button.className = 'answer-button bg-gray-700 hover:bg-gray-600 border-2 border-gray-600 text-white font-semibold px-6 py-4 rounded-lg text-lg';
-                button.textContent = answer;
-                button.dataset.answer = answer;
-                button.onclick = () => selectAnswer(answer);
-                answersContainer.appendChild(button);
-            });
+            // Режим ответа: варианты или ручной ввод
+            if (data.answer_mode === 'input') {
+                answersContainer.classList.add('hidden');
+                inputContainer.classList.remove('hidden');
+
+                if (data.question_type === 'kanji_to_ru') {
+                    answerInput.placeholder = 'Введите перевод на русский...';
+                    inputHint.textContent = 'Режим ввода: напишите перевод и нажмите Enter или «Проверить».';
+                } else {
+                    answerInput.placeholder = 'Введите кандзи...';
+                    inputHint.textContent = 'Режим ввода: напишите кандзи и нажмите Enter или «Проверить».';
+                }
+
+                setTimeout(() => answerInput?.focus(), 50);
+            } else {
+                // Создаем кнопки с ответами
+                data.answers.forEach((answer) => {
+                    const button = document.createElement('button');
+                    button.className = 'answer-button bg-gray-700 hover:bg-gray-600 border-2 border-gray-600 text-white font-semibold px-6 py-4 rounded-lg text-lg';
+                    button.textContent = answer;
+                    button.dataset.answer = answer;
+                    button.onclick = () => selectAnswer(answer);
+                    answersContainer.appendChild(button);
+                });
+                answersContainer.classList.remove('hidden');
+            }
         })
         .catch(error => {
             console.error('Ошибка загрузки вопроса:', error);
-            alert('Ошибка загрузки вопроса. Попробуйте обновить страницу.');
+            alert(error?.message || 'Ошибка загрузки вопроса. Попробуйте обновить страницу.');
         });
     }
 
@@ -204,12 +291,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const buttons = answersContainer.querySelectorAll('.answer-button');
         buttons.forEach(btn => {
             btn.disabled = true;
-            if (btn.dataset.answer === currentQuestion.correct_answer) {
-                btn.classList.add('correct');
-            } else if (btn.dataset.answer === answer) {
-                btn.classList.add('incorrect');
-            }
         });
+
+        if (answerInput) answerInput.disabled = true;
+        if (submitInputBtn) submitInputBtn.disabled = true;
         
         // Отправляем ответ на сервер
         fetch('{{ route("kanji.submit-answer") }}', {
@@ -222,11 +307,31 @@ document.addEventListener('DOMContentLoaded', function() {
             body: JSON.stringify({
                 kanji: currentQuestion.kanji,
                 answer: answer,
-                correct_answer: currentQuestion.correct_answer,
+                quiz_id: quizId,
+                question_id: currentQuestion.question_id,
             })
         })
-        .then(response => response.json())
+        .then(async response => {
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Ошибка отправки ответа');
+            }
+            return data;
+        })
         .then(data => {
+            // Подсвечиваем правильный/неправильный уже после ответа (correct_answer серверный)
+            const serverCorrect = data.correct_answer;
+            if (currentQuestion?.answer_mode !== 'input') {
+                const buttons2 = answersContainer.querySelectorAll('.answer-button');
+                buttons2.forEach(btn => {
+                    if (btn.dataset.answer === serverCorrect) {
+                        btn.classList.add('correct');
+                    } else if (btn.dataset.answer === answer) {
+                        btn.classList.add('incorrect');
+                    }
+                });
+            }
+
             answeredCount++;
             updateProgress();
             
@@ -241,9 +346,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 resultText.className = 'text-2xl font-bold mb-4 text-red-400';
             }
             
-            resultLevel.textContent = `Правильный ответ: ${currentQuestion.correct_answer} | Новый уровень: ${data.new_level}/10`;
+            resultLevel.textContent = `Правильный ответ: ${serverCorrect} | Новый уровень: ${data.new_level}/10`;
             resultContainer.classList.remove('hidden');
             answersContainer.classList.add('hidden');
+            inputContainer.classList.add('hidden');
+
+            // Показываем чтение + примеры слов (если есть)
+            if (afterAnswerDetails) afterAnswerDetails.classList.remove('hidden');
+            if (currentQuestion?.reading && String(currentQuestion.reading).trim() !== '') {
+                afterReading.textContent = currentQuestion.reading;
+                afterReadingContainer.classList.remove('hidden');
+            } else {
+                afterReadingContainer.classList.add('hidden');
+            }
+            if (currentQuestion?.description && String(currentQuestion.description).trim() !== '') {
+                afterExamples.textContent = currentQuestion.description;
+                afterExamplesContainer.classList.remove('hidden');
+            } else {
+                afterExamplesContainer.classList.add('hidden');
+            }
+
+            // Авто-озвучка чтения (если доступно)
+            if (currentQuestion?.reading && window.speakJapanese) {
+                window.speakJapanese(String(currentQuestion.reading));
+            }
             
             // Если это последний вопрос, показываем финальное сообщение
             if (answeredCount >= totalCount) {
@@ -256,8 +382,13 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .catch(error => {
             console.error('Ошибка отправки ответа:', error);
-            alert('Ошибка отправки ответа. Попробуйте еще раз.');
+            alert(error?.message || 'Ошибка отправки ответа. Попробуйте еще раз.');
+            // Разрешаем попробовать снова (и снимаем disabled)
             answered = false;
+            const buttons3 = answersContainer.querySelectorAll('.answer-button');
+            buttons3.forEach(btn => { btn.disabled = false; btn.classList.remove('correct', 'incorrect'); });
+            if (answerInput) answerInput.disabled = false;
+            if (submitInputBtn) submitInputBtn.disabled = false;
         });
     }
 
@@ -281,6 +412,35 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             hintText.classList.add('hidden');
             hintButton.textContent = '💡 Показать подсказку';
+        }
+    });
+
+    // Ручной ввод: Enter / кнопка
+    function submitTypedAnswer() {
+        const val = (answerInput?.value || '').trim();
+        if (!val) return;
+        selectAnswer(val);
+    }
+
+    submitInputBtn?.addEventListener('click', function() {
+        submitTypedAnswer();
+    });
+
+    answerInput?.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            submitTypedAnswer();
+        }
+    });
+
+    // Озвучка чтения через глобальную функцию (определена в layouts/app.blade.php)
+    // window.speakJapanese уже доступна
+
+    // Кнопка озвучки
+    speakReadingBtn?.addEventListener('click', function() {
+        const text = String(afterReading?.textContent || '').trim();
+        if (window.speakJapanese) {
+            window.speakJapanese(text);
         }
     });
 });

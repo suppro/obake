@@ -156,10 +156,33 @@
     .word-highlight-completed:hover {
         background-color: rgba(34, 197, 94, 0.5);
     }
-    .furigana {
-        font-size: 0.6em;
-        position: relative;
-        top: -0.5em;
+    /* Фуригана через ruby/rt */
+    ruby {
+        ruby-position: over;
+        ruby-align: center;
+        display: inline;
+        vertical-align: baseline;
+    }
+    ruby > rt {
+        font-size: 0.5em;
+        line-height: 1;
+        color: rgba(209, 213, 219, 0.85);
+        user-select: none;
+        text-align: center;
+        white-space: nowrap;
+        font-weight: normal;
+    }
+    rt.furigana {
+        font-size: 0.5em;
+        line-height: 1;
+        color: rgba(209, 213, 219, 0.85);
+        user-select: none;
+        text-align: center;
+        white-space: nowrap;
+    }
+    ruby > * {
+        display: inline;
+        line-height: inherit;
     }
     .speaking {
         background-color: rgba(59, 130, 246, 0.3) !important;
@@ -347,55 +370,162 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentUtterance = null;
     let speechSynthesis = window.speechSynthesis;
     let currentSpeakingElement = null;
-    let selectedVoice = null;
     
-    // Функция для выбора лучшего японского голоса
-    function selectBestJapaneseVoice() {
-        if (!speechSynthesis) return null;
-        
-        const voices = speechSynthesis.getVoices();
-        if (voices.length === 0) return null;
-        
-        // Приоритет: Neural voices > Premium voices > Standard voices
-        // Ищем голоса с "Neural" или "Premium" в названии
-        let neuralVoice = voices.find(v => 
-            v.lang.startsWith('ja') && 
-            (v.name.includes('Neural') || v.name.includes('Premium') || v.name.includes('Enhanced'))
-        );
-        
-        if (neuralVoice) return neuralVoice;
-        
-        // Ищем любой японский голос женского пола (обычно звучат лучше)
-        let femaleVoice = voices.find(v => 
-            v.lang.startsWith('ja') && 
-            (v.name.includes('Female') || v.name.includes('女') || v.name.includes('F'))
-        );
-        
-        if (femaleVoice) return femaleVoice;
-        
-        // Ищем любой японский голос
-        let japaneseVoice = voices.find(v => v.lang.startsWith('ja'));
-        
-        return japaneseVoice || null;
+    // Используем глобальную функцию выбора японского голоса (определена в layouts/app.blade.php)
+    // window.japaneseVoice и window.selectBestJapaneseVoice уже доступны
+    
+    // ====== Фоллбек фуриганы через Jisho (без локального словаря) ======
+    const furiganaCache = new Map();
+    try {
+        const rawCache = localStorage.getItem('furigana_cache_v1') || '{}';
+        const objCache = JSON.parse(rawCache);
+        Object.entries(objCache).forEach(([k, v]) => furiganaCache.set(k, v));
+    } catch (_) {}
+    function saveFuriganaCache() {
+        try {
+            const obj = {};
+            furiganaCache.forEach((v, k) => obj[k] = v);
+            localStorage.setItem('furigana_cache_v1', JSON.stringify(obj));
+        } catch (_) {}
     }
-    
-    // Загружаем голоса (может потребоваться время)
-    function loadVoices() {
-        const voices = speechSynthesis.getVoices();
-        if (voices.length > 0) {
-            selectedVoice = selectBestJapaneseVoice();
-            if (selectedVoice) {
-                console.log('Выбран голос:', selectedVoice.name, selectedVoice.lang);
-            } else {
-                console.warn('Японский голос не найден, будет использован голос по умолчанию');
+    async function fetchReadingFromJisho(term) {
+        const key = (term || '').trim();
+        if (!key) return '';
+        if (furiganaCache.has(key)) return furiganaCache.get(key) || '';
+        try {
+            // Используем серверный эндпоинт вместо прямого запроса к Jisho (избегаем CORS)
+            const url = '{{ route("stories.word-reading") }}?word=' + encodeURIComponent(key);
+            const resp = await fetch(url, { 
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json();
+            let reading = '';
+            if (data && data.success && data.reading) {
+                reading = data.reading;
             }
+            furiganaCache.set(key, reading);
+            saveFuriganaCache();
+            return reading || '';
+        } catch (e) {
+            console.warn('Jisho error for', term, e);
+            furiganaCache.set(key, '');
+            saveFuriganaCache();
+            return '';
         }
     }
-    
-    // Загружаем голоса сразу и при их загрузке
-    loadVoices();
-    if (speechSynthesis.onvoiceschanged !== undefined) {
-        speechSynthesis.onvoiceschanged = loadVoices;
+    function collectKanjiTokensFromText(text) {
+        // Ищем все японские слова/фразы с кандзи (от 1 до 6 символов для лучшего покрытия)
+        const set = new Set();
+        
+        // Сначала ищем более длинные фразы/слова (2-6 символов) - они имеют более точное чтение
+        const wordRegex = /[\u4E00-\u9FFF々〆ヵヶ][\u3040-\u30FF\u4E00-\u9FFF々〆ヵヶー]{0,5}/g;
+        let m;
+        while ((m = wordRegex.exec(text)) !== null) {
+            const tok = m[0];
+            if (tok && tok.length >= 1 && tok.length <= 6) {
+                // Проверяем, что содержит хотя бы один кандзи (не только хирагана/катакана)
+                if (/[\u4E00-\u9FFF々〆ヵヶ]/.test(tok)) {
+                    set.add(tok);
+                }
+            }
+        }
+        
+        // Сортируем: сначала длинные (более точные), потом короткие
+        return Array.from(set).sort((a, b) => {
+            if (a.length !== b.length) return b.length - a.length;
+            return a.localeCompare(b);
+        });
+    }
+    async function applyFuriganaFallbackToPlain(html) {
+        if (!furiganaEnabled) return html;
+        const textOnly = html.replace(/<[^>]+>/g, '');
+        const allTokens = collectKanjiTokensFromText(textOnly);
+        
+        // Увеличиваем лимит токенов для лучшего покрытия
+        const tokens = allTokens.slice(0, 100);
+        if (tokens.length === 0) return html;
+        
+        // Получаем чтения для всех токенов батчами (по 20 за раз для избежания перегрузки)
+        const readings = {};
+        const batchSize = 20;
+        for (let i = 0; i < tokens.length; i += batchSize) {
+            const batch = tokens.slice(i, i + batchSize);
+            await Promise.all(batch.map(async (t) => {
+                readings[t] = await fetchReadingFromJisho(t);
+            }));
+        }
+        
+        // Обрабатываем в порядке длины (сначала длинные слова, потом короткие)
+        // Используем безопасную замену, избегая уже обработанных частей
+        let out = html;
+        const processedRanges = []; // Массив [start, end] для отслеживания обработанных диапазонов
+        
+        tokens.forEach((t) => {
+            const reading = readings[t] || '';
+            if (!reading || reading === t) return; // Пропускаем если чтение совпадает с текстом
+
+            const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const re = new RegExp(escaped, 'g');
+            let match;
+            
+            while ((match = re.exec(html)) !== null) {
+                const start = match.index;
+                const end = start + match[0].length;
+                
+                // Проверяем, не находится ли это в уже обработанном диапазоне или внутри HTML тегов
+                const beforeContext = html.substring(Math.max(0, start - 50), start);
+                const afterContext = html.substring(end, Math.min(html.length, end + 50));
+                
+                // Пропускаем если это внутри HTML тегов
+                if (beforeContext.includes('<') && !beforeContext.includes('>') ||
+                    afterContext.includes('>') && !afterContext.includes('<')) {
+                    continue;
+                }
+                
+                // Пропускаем если уже внутри ruby тега
+                if (beforeContext.includes('<ruby') || beforeContext.includes('<rt')) {
+                    continue;
+                }
+                
+                // Проверяем пересечения с уже обработанными диапазонами
+                let overlaps = false;
+                for (const [procStart, procEnd] of processedRanges) {
+                    if (!(end <= procStart || start >= procEnd)) {
+                        overlaps = true;
+                        break;
+                    }
+                }
+                
+                if (!overlaps) {
+                    const ruby = `<ruby>${match[0]}<rt class="furigana">${escapeHtml(reading)}</rt></ruby>`;
+                    out = out.substring(0, start) + ruby + out.substring(end);
+                    processedRanges.push([start, end]);
+                    // Обновляем html для следующей итерации
+                    html = out;
+                    // Сбрасываем regex для нового поиска
+                    re.lastIndex = 0;
+                    break; // Обрабатываем только первое вхождение каждого токена за раз
+                }
+            }
+        });
+        
+        return out;
+    }
+    async function renderStoryContent(showFurigana) {
+        let html = processStoryContent(rawContent, wordsData, userWords, showFurigana, wordProgress);
+        
+        // Если включена фуригана, добавляем её для всех слов с кандзи (не только из словаря)
+        if (showFurigana) {
+            storyContent.innerHTML = '<div class="text-gray-400 text-sm">Добавляю фуригану…</div>';
+            html = await applyFuriganaFallbackToPlain(html);
+        }
+        
+        storyContent.innerHTML = html;
     }
     
     // Функция для определения класса подсветки на основе прогресса изучения
@@ -514,7 +644,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             end: match.index + match[0].length,
                             text: match[0],
                             wordId: wordId,
-                            highlightClass: highlightClass
+                            highlightClass: highlightClass,
+                            reading: formReading || wordReading || ''
                         });
                         processedPositions.add(key);
                     }
@@ -544,7 +675,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                     end: match.index + match[0].length,
                                     text: match[0],
                                     wordId: wordId,
-                                    highlightClass: highlightClass
+                                    highlightClass: highlightClass,
+                                    // Если в тексте уже встречается чтение (кана), фуригана не нужна
+                                    reading: ''
                                 });
                                 processedPositions.add(key);
                             }
@@ -557,11 +690,17 @@ document.addEventListener('DOMContentLoaded', function() {
         // Сортируем по позиции (с конца, чтобы не сбить индексы)
         matches.sort((a, b) => b.start - a.start);
         
-        // Размечаем только слова пользователя
-        matches.forEach(({start, end, text, wordId, highlightClass}) => {
-            let replacement = `<span class="${highlightClass}" 
-                data-word-id="${wordId}">${text}</span>`;
-            
+        const hasKanji = (s) => /[\u4E00-\u9FFF]/u.test(s || '');
+
+        // Размечаем только слова пользователя (+ фуригана по желанию)
+        matches.forEach(({start, end, text, wordId, highlightClass, reading}) => {
+            const inner = `<span class="${highlightClass}" data-word-id="${wordId}">${text}</span>`;
+
+            let replacement = inner;
+            if (showFurigana && reading && reading.trim() !== '' && hasKanji(text) && text !== reading) {
+                replacement = `<ruby>${inner}<rt class="furigana">${escapeHtml(reading)}</rt></ruby>`;
+            }
+
             processed = processed.substring(0, start) + replacement + processed.substring(end);
         });
         
@@ -981,10 +1120,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Обработка переключения фуриганы
-    furiganaToggle.addEventListener('change', function() {
+    furiganaToggle.addEventListener('change', async function() {
         furiganaEnabled = this.checked;
-        const content = rawContent;
-        storyContent.innerHTML = processStoryContent(content, wordsData, userWords, furiganaEnabled, wordProgress);
+        await renderStoryContent(furiganaEnabled);
         // Используем выделение текста вместо наведения
     });
     
@@ -1358,23 +1496,19 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Инициализация
-    try {
-        console.log('Начало обработки текста');
-        console.log('rawContent length:', rawContent.length);
-        console.log('wordsData keys:', Object.keys(wordsData).length);
-        console.log('userWords:', userWords.length);
-        
-        const processedContent = processStoryContent(rawContent, wordsData, userWords, furiganaEnabled, wordProgress);
-        console.log('Обработанный контент length:', processedContent.length);
-        
-        storyContent.innerHTML = processedContent;
-        // Используем выделение текста вместо наведения
-    } catch (error) {
-        console.error('Ошибка при обработке текста:', error);
-        console.error('Stack trace:', error.stack);
-        // В случае ошибки показываем исходный текст
-        storyContent.innerHTML = rawContent || '<p class="text-purple-400">Ошибка при загрузке текста</p>';
-    }
+    (async () => {
+        try {
+            console.log('Начало обработки текста');
+            console.log('rawContent length:', rawContent.length);
+            console.log('wordsData keys:', Object.keys(wordsData).length);
+            console.log('userWords:', userWords.length);
+            await renderStoryContent(furiganaEnabled);
+        } catch (error) {
+            console.error('Ошибка при обработке текста:', error);
+            console.error('Stack trace:', error.stack);
+            storyContent.innerHTML = rawContent || '<p class="text-purple-400">Ошибка при загрузке текста</p>';
+        }
+    })();
     
     // Функция для извлечения чистого текста из HTML
     function extractTextFromHTML(html) {
@@ -1415,15 +1549,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            // Обновляем список голосов перед каждой озвучкой
-            loadVoices();
-            
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'ja-JP';
             
-            // Используем выбранный голос, если доступен
-            if (selectedVoice) {
-                utterance.voice = selectedVoice;
+            // Используем глобально выбранный японский голос
+            if (window.japaneseVoice) {
+                utterance.voice = window.japaneseVoice;
             }
             
             // Более естественные параметры для лучшего звучания
@@ -2200,8 +2331,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        // Если аудио нет, используем браузерную озвучку
-        if ('speechSynthesis' in window) {
+        // Если аудио нет, используем браузерную озвучку через глобальную функцию
+        if (window.speakJapanese) {
             // Используем reading если есть, иначе japanese
             const textToSpeak = buttonElement.dataset.wordReading || wordText || word.japanese || '';
             
@@ -2210,153 +2341,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            // Не отменяем сразу, даем время если что-то уже говорит
-            // Но для слов в рассказах отменяем только если это не слово
-            if (window.speechSynthesis.speaking) {
-                console.log('Уже идет озвучивание, отменяем для нового слова');
-                window.speechSynthesis.cancel();
-                // Даем время на отмену перед новым озвучиванием
-                setTimeout(() => {
-                    startSpeaking();
-                }, 150);
-            } else {
-                startSpeaking();
-            }
-            
-            function startSpeaking() {
-                const utterance = new SpeechSynthesisUtterance(textToSpeak);
-                utterance.lang = 'ja-JP';
-                utterance.rate = 1.0;
-                utterance.pitch = 1.0;
-                utterance.volume = 1.0;
-            
-                // Функция для озвучивания с голосом
-                function speakWithVoice() {
-                    const voices = window.speechSynthesis.getVoices();
-                    if (voices.length > 0) {
-                        // Ищем японский голос
-                        const japaneseVoice = voices.find(v => v.lang.startsWith('ja')) || null;
-                        if (japaneseVoice) {
-                            // Проверяем, что голос действительно доступен
-                            if (japaneseVoice.localService === false) {
-                                console.warn('ВНИМАНИЕ: Голос не является локальным (localService: false). Возможно, голосовые файлы отсутствуют или повреждены.');
-                                console.warn('Попробуйте переустановить японские голоса Windows через:');
-                                console.warn('Параметры Windows → Время и язык → Язык → Добавить язык → Японский → Речь');
-                            }
-                            utterance.voice = japaneseVoice;
-                            console.log('Используем голос:', japaneseVoice.name, 'lang:', japaneseVoice.lang, 'localService:', japaneseVoice.localService);
-                        } else {
-                            console.error('Японский голос не найден!');
-                            console.warn('Для установки японских голосов:');
-                            console.warn('1. Параметры Windows → Время и язык → Язык');
-                            console.warn('2. Добавить язык → Японский');
-                            console.warn('3. После установки: Параметры → Речь → Добавить голос');
-                        }
-                    } else {
-                        console.error('Голоса не загружены! Возможно, они были удалены.');
-                        console.warn('Попробуйте перезагрузить страницу или переустановить голоса Windows.');
-                    }
-                    console.log('Начинаем озвучивание:', textToSpeak, {
-                        volume: utterance.volume,
-                        rate: utterance.rate,
-                        pitch: utterance.pitch,
-                        lang: utterance.lang,
-                        voice: utterance.voice ? utterance.voice.name : 'не установлен'
-                    });
-                    
-                    // Добавляем обработчики для отладки ПЕРЕД вызовом speak
-                    utterance.onstart = function(event) {
-                        console.log('Озвучивание началось', {
-                            charIndex: event.charIndex,
-                            elapsedTime: event.elapsedTime,
-                            name: event.name,
-                            voice: utterance.voice ? utterance.voice.name : 'не установлен'
-                        });
-                    };
-                    utterance.onerror = function(event) {
-                        console.error('Ошибка озвучивания:', {
-                            error: event.error,
-                            charIndex: event.charIndex,
-                            type: event.type,
-                            message: event.error === 'network' ? 'Проблема с сетью' : 
-                                     event.error === 'synthesis' ? 'Проблема синтеза' :
-                                     event.error === 'synthesis-unavailable' ? 'Синтез недоступен' :
-                                     event.error === 'audio-busy' ? 'Аудио занято' :
-                                     event.error === 'audio-hardware' ? 'Проблема с аудио-оборудованием' :
-                                     'Неизвестная ошибка'
-                        });
-                    };
-                    utterance.onend = function(event) {
-                        console.log('Озвучивание завершено', {
-                            charIndex: event.charIndex,
-                            elapsedTime: event.elapsedTime,
-                            name: event.name
-                        });
-                    };
-                    utterance.onpause = function(event) {
-                        console.log('Озвучивание приостановлено', event);
-                    };
-                    utterance.onresume = function(event) {
-                        console.log('Озвучивание возобновлено', event);
-                    };
-                    
-                    // Убеждаемся, что speechSynthesis не заблокирован
-                    try {
-                        // Отменяем любые текущие озвучивания перед новым
-                        if (window.speechSynthesis.speaking) {
-                            window.speechSynthesis.cancel();
-                            // Ждем немного перед новым озвучиванием
-                            setTimeout(() => {
-                                console.log('Запускаем speechSynthesis.speak для слова после отмены предыдущего');
-                                window.speechSynthesis.speak(utterance);
-                            }, 50);
-                        } else {
-                            console.log('Запускаем speechSynthesis.speak для слова');
-                            window.speechSynthesis.speak(utterance);
-                        }
-                    } catch (e) {
-                        console.error('Ошибка при вызове speak:', e);
-                        // Пробуем еще раз через небольшую задержку
-                        setTimeout(() => {
-                            try {
-                                window.speechSynthesis.speak(utterance);
-                            } catch (e2) {
-                                console.error('Повторная ошибка:', e2);
-                            }
-                        }, 100);
-                    }
-                }
-                
-                // Проверяем, загружены ли голоса
-                const voices = window.speechSynthesis.getVoices();
-                if (voices.length > 0) {
-                    speakWithVoice();
-                } else {
-                    console.log('Голоса еще не загружены, ждем...');
-                    // Ждем загрузки голосов
-                    const voicesHandler = function() {
-                        console.log('Голоса загружены');
-                        speakWithVoice();
-                        // Удаляем обработчик после первого использования
-                        window.speechSynthesis.onvoiceschanged = null;
-                    };
-                    window.speechSynthesis.onvoiceschanged = voicesHandler;
-                    
-                    // Таймаут на случай, если событие не сработает
-                    setTimeout(function() {
-                        if (window.speechSynthesis.getVoices().length > 0) {
-                            speakWithVoice();
-                        } else {
-                            console.warn('Голоса не загрузились, пробуем без голоса');
-                            try {
-                                window.speechSynthesis.speak(utterance);
-                            } catch (e) {
-                                console.error('Ошибка при озвучивании без голоса:', e);
-                            }
-                        }
-                    }, 1000);
-                }
-            }
+            window.speakJapanese(textToSpeak);
         } else {
             alert('Озвучка не поддерживается в вашем браузере');
         }
@@ -2385,27 +2370,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 
-                if ('speechSynthesis' in window) {
-                    // Отменяем предыдущее озвучивание
-                    if (window.speechSynthesis.speaking) {
-                        window.speechSynthesis.cancel();
-                    }
-                    
-                    const utterance = new SpeechSynthesisUtterance(textToSpeak);
-                    utterance.lang = 'ja-JP';
-                    utterance.rate = 1.0;
-                    utterance.pitch = 1.0;
-                    utterance.volume = 1.0;
-                    
-                    // Выбираем японский голос
-                    const voices = window.speechSynthesis.getVoices();
-                    const japaneseVoice = voices.find(v => v.lang.startsWith('ja')) || null;
-                    if (japaneseVoice) {
-                        utterance.voice = japaneseVoice;
-                    }
-                    
-                    // Озвучиваем
-                    window.speechSynthesis.speak(utterance);
+                // Озвучиваем через глобальную функцию
+                if (window.speakJapanese) {
+                    window.speakJapanese(textToSpeak);
                 } else {
                     alert('Озвучка не поддерживается в вашем браузере');
                 }

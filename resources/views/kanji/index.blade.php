@@ -9,8 +9,32 @@
         <p class="text-gray-400">Изучайте кандзи в формате квиза</p>
     </div>
 
+    <!-- Фильтр по JLPT -->
+    <div class="mb-6 bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+        <h3 class="text-xl font-bold text-purple-400 mb-4">Уровень JLPT</h3>
+        @php
+            $currentJlpt = $jlptLevel ?? '5';
+            $searchParam = $search ?? null;
+        @endphp
+        <div class="flex flex-wrap gap-2">
+            @foreach([5,4,3,2,1] as $lvl)
+                <a href="{{ route('kanji.index', array_filter(['jlpt_level' => (string)$lvl, 'search' => $searchParam])) }}"
+                   class="px-4 py-2 rounded-lg font-semibold border transition-all
+                          {{ (string)$currentJlpt === (string)$lvl ? 'bg-purple-600 border-purple-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600' }}">
+                    N{{ $lvl }}
+                </a>
+            @endforeach
+            <a href="{{ route('kanji.index', array_filter(['jlpt_level' => 'any', 'search' => $searchParam])) }}"
+               class="px-4 py-2 rounded-lg font-semibold border transition-all
+                      {{ (string)$currentJlpt === 'any' ? 'bg-purple-600 border-purple-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600' }}">
+                Любой
+            </a>
+        </div>
+        <p class="text-gray-400 text-sm mt-2">По умолчанию показан уровень N5. Переключайся кнопками.</p>
+    </div>
+
     <!-- Статистика -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div class="bg-gradient-to-br from-purple-800/50 to-indigo-800/50 rounded-xl p-6 border border-purple-700/50">
             <div class="text-3xl font-bold text-purple-300 mb-1">{{ $totalKanji }}</div>
             <div class="text-gray-300">Всего кандзи</div>
@@ -22,6 +46,10 @@
         <div class="bg-gradient-to-br from-green-800/50 to-emerald-800/50 rounded-xl p-6 border border-green-700/50">
             <div class="text-3xl font-bold text-green-300 mb-1">{{ $completedKanji }}</div>
             <div class="text-gray-300">Изучено (10/10)</div>
+        </div>
+        <div class="bg-gradient-to-br from-yellow-800/50 to-amber-800/50 rounded-xl p-6 border border-yellow-700/50">
+            <div class="text-3xl font-bold text-yellow-300 mb-1">{{ $dueKanji ?? 0 }}</div>
+            <div class="text-gray-300">Пора повторить</div>
         </div>
     </div>
 
@@ -54,28 +82,50 @@
     <!-- Кнопка начала квиза -->
     <div class="mb-8 bg-gray-800/50 rounded-xl p-6 border border-gray-700">
         <h3 class="text-xl font-bold text-purple-400 mb-4">Начать квиз</h3>
-        <form action="{{ route('kanji.quiz') }}" method="GET" class="flex flex-wrap items-center gap-4">
-            <div class="flex items-center gap-2">
-                <label class="text-gray-300">Количество:</label>
-                <input type="number" name="count" value="10" min="1" max="50" 
-                       class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white w-24 focus:outline-none focus:ring-2 focus:ring-purple-500">
+        <form action="{{ route('kanji.quiz') }}" method="GET" class="space-y-4">
+            <div class="flex flex-wrap items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <label class="text-gray-300">Количество:</label>
+                    <input type="number" name="count" value="10" min="1" max="50" 
+                           class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white w-24 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-gray-300">Уровень JLPT:</label>
+                    <select name="jlpt_level" 
+                           class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="5" {{ (string)($jlptLevel ?? '5') === '5' ? 'selected' : '' }}>N5 (Начальный)</option>
+                        <option value="4" {{ (string)($jlptLevel ?? '5') === '4' ? 'selected' : '' }}>N4 (Базовый)</option>
+                        <option value="3" {{ (string)($jlptLevel ?? '5') === '3' ? 'selected' : '' }}>N3 (Средний)</option>
+                        <option value="2" {{ (string)($jlptLevel ?? '5') === '2' ? 'selected' : '' }}>N2 (Выше среднего)</option>
+                        <option value="1" {{ (string)($jlptLevel ?? '5') === '1' ? 'selected' : '' }}>N1 (Продвинутый)</option>
+                        <option value="any" {{ (string)($jlptLevel ?? '5') === 'any' ? 'selected' : '' }}>Любой</option>
+                    </select>
+                </div>
+            </div>
+            <!-- Настройка: включить выбор кандзи для квиза -->
+            <div class="flex items-center gap-3">
+                <label class="flex items-center cursor-pointer select-none">
+                    <input type="checkbox"
+                           id="toggle-selection-mode"
+                           class="w-5 h-5 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500 focus:ring-2"
+                           {{ ($useKanjiSelection ?? false) ? 'checked' : '' }}>
+                    <span class="ml-2 text-gray-300">✅ Включить выбор конкретных кандзи для квиза</span>
+                </label>
+                <span class="text-gray-500 text-sm">Появятся галочки в таблице</span>
             </div>
             <div class="flex items-center gap-2">
-                <label class="text-gray-300">Уровень JLPT:</label>
-                <select name="jlpt_level" 
-                       class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
-                    <option value="any">Любой</option>
-                    <option value="5">N5 (Начальный)</option>
-                    <option value="4">N4 (Базовый)</option>
-                    <option value="3">N3 (Средний)</option>
-                    <option value="2">N2 (Выше среднего)</option>
-                    <option value="1">N1 (Продвинутый)</option>
-                </select>
+                <label class="flex items-center cursor-pointer">
+                    <input type="checkbox" name="force_input_mode" value="1" 
+                           class="w-5 h-5 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500 focus:ring-2">
+                    <span class="ml-2 text-gray-300">✍️ Только ручной ввод (без вариантов ответа)</span>
+                </label>
             </div>
-            <button type="submit" 
-                    class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-3 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50 transform hover:scale-105">
-                Начать квиз 🎯
-            </button>
+            <div>
+                <button type="submit" 
+                        class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-3 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50 transform hover:scale-105">
+                    Начать квиз 🎯
+                </button>
+            </div>
         </form>
     </div>
 
@@ -108,12 +158,23 @@
                                             data-level="{{ $item['level'] }}"
                                             data-jlpt-level="{{ $item['jlpt_level'] ?? '' }}"
                                             data-last-reviewed="{{ $item['last_reviewed_at'] ? $item['last_reviewed_at']->format('d.m.Y') : '' }}"
+                                            data-next-review="{{ $item['next_review_at'] ? $item['next_review_at']->format('d.m.Y H:i') : '' }}"
                                             data-is-completed="{{ $item['is_completed'] ? '1' : '0' }}"
+                                            data-is-selected="{{ $item['is_selected_for_study'] ? '1' : '0' }}"
                                             data-image-path="{{ $item['image_path'] ?? '' }}"
                                             data-mnemonic="{{ htmlspecialchars($item['mnemonic'] ?? '', ENT_QUOTES, 'UTF-8') }}"
                                             data-description="{{ htmlspecialchars($item['description'] ?? '', ENT_QUOTES, 'UTF-8') }}"
                                             onclick="openKanjiModal(this)"
-                                            style="width: 120px; height: 120px; padding: 1rem; vertical-align: middle;">
+                                            style="width: 120px; height: 120px; padding: 1rem; vertical-align: middle; position: relative;">
+                                            <!-- Чекбокс для выбора в изучение -->
+                                            <div class="kanji-selection-overlay" style="position: absolute; top: 4px; left: 4px; z-index: 10; {{ ($useKanjiSelection ?? false) ? '' : 'display:none;' }}">
+                                                <input type="checkbox" 
+                                                       class="kanji-study-checkbox w-5 h-5 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500 focus:ring-2 cursor-pointer"
+                                                       data-kanji="{{ $item['kanji'] }}"
+                                                       {{ $item['is_selected_for_study'] ? 'checked' : '' }}
+                                                       onclick="event.stopPropagation(); toggleKanjiStudySelection(this);"
+                                                       title="Выбрать для изучения в квизе">
+                                            </div>
                                             <div style="display: flex; flex-direction: column; height: 100%; justify-content: space-between; align-items: center;">
                                                 <div class="text-6xl font-bold text-white" style="font-family: 'Noto Sans JP', sans-serif; line-height: 1.2; display: flex; align-items: center; justify-content: center; flex: 1;">{{ $item['kanji'] }}</div>
                                                 <!-- Прогресс-бар -->
@@ -195,35 +256,84 @@
                     <!-- Перевод -->
                     <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
                         <div class="text-gray-400 text-sm mb-1">Перевод</div>
-                        <div class="text-white text-lg font-semibold" id="modal-translation"></div>
+                        @if($isAdmin ?? false)
+                            <div class="text-white text-lg font-semibold" id="modal-translation-view"></div>
+                            <input type="text" id="modal-translation-edit" class="hidden w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-lg font-semibold focus:outline-none focus:border-purple-500" placeholder="Перевод на русский">
+                        @else
+                            <div class="text-white text-lg font-semibold" id="modal-translation"></div>
+                        @endif
                     </div>
                     
                     <!-- Чтение -->
-                    <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hidden" id="modal-reading-container">
+                    <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600" id="modal-reading-container">
                         <div class="text-gray-400 text-sm mb-1">Чтение</div>
-                        <div class="text-white text-lg font-semibold" id="modal-reading"></div>
+                        @if($isAdmin ?? false)
+                            <div class="text-white text-lg font-semibold" id="modal-reading-view"></div>
+                            <input type="text" id="modal-reading-edit" class="hidden w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-lg font-semibold focus:outline-none focus:border-purple-500" placeholder="Чтение (хирагана/ромадзи)">
+                        @else
+                            <div class="text-white text-lg font-semibold" id="modal-reading"></div>
+                        @endif
                     </div>
                     
                     <!-- Примеры слов -->
-                    <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hidden" id="modal-description-container">
+                    <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600" id="modal-description-container">
                         <div class="text-gray-400 text-sm mb-2">Примеры слов</div>
-                        <div class="text-white text-sm" id="modal-description"></div>
+                        @if($isAdmin ?? false)
+                            <div class="text-white text-sm whitespace-pre-wrap" id="modal-description-view"></div>
+                            <textarea id="modal-description-edit" rows="3" class="hidden w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500" placeholder="Примеры слов с этим кандзи"></textarea>
+                        @else
+                            <div class="text-white text-sm" id="modal-description"></div>
+                        @endif
                     </div>
                     
                     <!-- Уровень JLPT -->
-                    <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hidden" id="modal-jlpt-container">
+                    <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600" id="modal-jlpt-container">
                         <div class="text-gray-400 text-sm mb-1">Уровень JLPT</div>
-                        <div class="text-purple-300 text-lg font-semibold" id="modal-jlpt"></div>
+                        @if($isAdmin ?? false)
+                            <div class="text-purple-300 text-lg font-semibold" id="modal-jlpt-view"></div>
+                            <select id="modal-jlpt-edit" class="hidden w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-purple-300 text-lg font-semibold focus:outline-none focus:border-purple-500">
+                                <option value="">-- Без уровня --</option>
+                                <option value="5">N5</option>
+                                <option value="4">N4</option>
+                                <option value="3">N3</option>
+                                <option value="2">N2</option>
+                                <option value="1">N1</option>
+                            </select>
+                        @else
+                            <div class="text-purple-300 text-lg font-semibold" id="modal-jlpt"></div>
+                        @endif
+                    </div>
+
+                    <!-- Следующее повторение -->
+                    <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hidden" id="modal-next-review-container">
+                        <div class="text-gray-400 text-sm mb-1">Следующее повторение</div>
+                        <div class="text-yellow-300 text-lg font-semibold" id="modal-next-review"></div>
                     </div>
                     
                     <!-- Мнемоническая подсказка -->
-                    <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hidden" id="modal-mnemonic-container">
+                    <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600" id="modal-mnemonic-container">
                         <div class="text-gray-400 text-sm mb-2">Мнемоническая подсказка</div>
-                        <div class="text-gray-300 text-sm leading-relaxed" id="modal-mnemonic"></div>
+                        @if($isAdmin ?? false)
+                            <div class="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap" id="modal-mnemonic-view"></div>
+                            <textarea id="modal-mnemonic-edit" rows="4" class="hidden w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-gray-300 text-sm leading-relaxed focus:outline-none focus:border-purple-500" placeholder="Мнемоническая подсказка для запоминания"></textarea>
+                        @else
+                            <div class="text-gray-300 text-sm leading-relaxed" id="modal-mnemonic"></div>
+                        @endif
                     </div>
                     
-                    <!-- Кнопка отметки -->
-                    <div class="pt-2">
+                    <!-- Кнопки -->
+                    <div class="pt-2 space-y-2">
+                        @if($isAdmin ?? false)
+                            <button id="edit-kanji-btn" class="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold px-6 py-3 rounded-lg transition-all shadow-lg hover:shadow-blue-500/50">
+                                ✏️ Редактировать
+                            </button>
+                            <button id="save-kanji-btn" class="hidden w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-3 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50">
+                                💾 Сохранить изменения
+                            </button>
+                            <button id="cancel-edit-btn" class="hidden w-full bg-gray-600 hover:bg-gray-500 text-white font-semibold px-6 py-3 rounded-lg transition-all">
+                                ❌ Отменить
+                            </button>
+                        @endif
                         <button id="mark-completed-btn" class="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-semibold px-6 py-3 rounded-lg transition-all shadow-lg hover:shadow-green-500/50">
                             Отметить как изученное
                         </button>
@@ -246,6 +356,69 @@
 @push('scripts')
 <script>
 let currentKanji = null;
+
+// Функции переключения режимов (для админа) - должны быть определены ДО использования
+@if($isAdmin ?? false)
+window.enterEditMode = function() {
+    // Скрываем все view элементы
+    document.getElementById('modal-translation-view')?.classList.add('hidden');
+    document.getElementById('modal-reading-view')?.classList.add('hidden');
+    document.getElementById('modal-description-view')?.classList.add('hidden');
+    document.getElementById('modal-jlpt-view')?.classList.add('hidden');
+    document.getElementById('modal-mnemonic-view')?.classList.add('hidden');
+    
+    // Показываем все edit элементы
+    document.getElementById('modal-translation-edit')?.classList.remove('hidden');
+    document.getElementById('modal-reading-edit')?.classList.remove('hidden');
+    document.getElementById('modal-description-edit')?.classList.remove('hidden');
+    document.getElementById('modal-jlpt-edit')?.classList.remove('hidden');
+    document.getElementById('modal-mnemonic-edit')?.classList.remove('hidden');
+    
+    // Переключаем кнопки
+    document.getElementById('edit-kanji-btn')?.classList.add('hidden');
+    document.getElementById('save-kanji-btn')?.classList.remove('hidden');
+    document.getElementById('cancel-edit-btn')?.classList.remove('hidden');
+};
+
+window.exitEditMode = function() {
+    // Показываем все view элементы
+    document.getElementById('modal-translation-view')?.classList.remove('hidden');
+    document.getElementById('modal-reading-view')?.classList.remove('hidden');
+    document.getElementById('modal-description-view')?.classList.remove('hidden');
+    document.getElementById('modal-jlpt-view')?.classList.remove('hidden');
+    document.getElementById('modal-mnemonic-view')?.classList.remove('hidden');
+    
+    // Скрываем все edit элементы
+    document.getElementById('modal-translation-edit')?.classList.add('hidden');
+    document.getElementById('modal-reading-edit')?.classList.add('hidden');
+    document.getElementById('modal-description-edit')?.classList.add('hidden');
+    document.getElementById('modal-jlpt-edit')?.classList.add('hidden');
+    document.getElementById('modal-mnemonic-edit')?.classList.add('hidden');
+    
+    // Переключаем кнопки
+    document.getElementById('edit-kanji-btn')?.classList.remove('hidden');
+    document.getElementById('save-kanji-btn')?.classList.add('hidden');
+    document.getElementById('cancel-edit-btn')?.classList.add('hidden');
+};
+
+let originalData = {};
+window.restoreOriginalData = function() {
+    // Восстанавливаем исходные данные в поля редактирования
+    if (originalData) {
+        const translationEdit = document.getElementById('modal-translation-edit');
+        const readingEdit = document.getElementById('modal-reading-edit');
+        const descriptionEdit = document.getElementById('modal-description-edit');
+        const mnemonicEdit = document.getElementById('modal-mnemonic-edit');
+        const jlptEdit = document.getElementById('modal-jlpt-edit');
+        
+        if (translationEdit) translationEdit.value = originalData.translation || '';
+        if (readingEdit) readingEdit.value = originalData.reading || '';
+        if (descriptionEdit) descriptionEdit.value = originalData.description || '';
+        if (mnemonicEdit) mnemonicEdit.value = originalData.mnemonic || '';
+        if (jlptEdit) jlptEdit.value = originalData.jlptLevel || '';
+    }
+};
+@endif
 
 // Функция открытия модального окна (должна быть глобальной)
 window.openKanjiModal = function(kanjiItem) {
@@ -277,55 +450,115 @@ window.openKanjiModal = function(kanjiItem) {
     const level = parseInt(kanjiItem.getAttribute('data-level') || kanjiItem.dataset.level || '0');
     const jlptLevel = kanjiItem.getAttribute('data-jlpt-level') || kanjiItem.dataset.jlptLevel || '';
     const lastReviewed = kanjiItem.getAttribute('data-last-reviewed') || kanjiItem.dataset.lastReviewed || '';
+    const nextReview = kanjiItem.getAttribute('data-next-review') || kanjiItem.dataset.nextReview || '';
     const imagePath = kanjiItem.getAttribute('data-image-path') || kanjiItem.dataset.imagePath || '';
     const mnemonic = kanjiItem.getAttribute('data-mnemonic') || kanjiItem.dataset.mnemonic || '';
     const description = kanjiItem.getAttribute('data-description') || kanjiItem.dataset.description || '';
     const isCompleted = kanjiItem.getAttribute('data-is-completed') || kanjiItem.dataset.isCompleted || '0';
     
+    const isAdmin = {{ ($isAdmin ?? false) ? 'true' : 'false' }};
+    
+    // Сохраняем исходные данные для отмены редактирования
+    @if($isAdmin ?? false)
+    originalData = {
+        translation: translation || '',
+        reading: reading || '',
+        description: description || '',
+        mnemonic: mnemonic || '',
+        jlptLevel: jlptLevel || '',
+    };
+    @endif
+    
     // Заполняем основные поля
     const kanjiEl = document.getElementById('modal-kanji');
-    const translationEl = document.getElementById('modal-translation');
     if (kanjiEl) kanjiEl.textContent = currentKanji;
-    if (translationEl) translationEl.textContent = translation || 'Не указан';
     
-    // Чтение
-    const readingEl = document.getElementById('modal-reading');
+    // Перевод
+    if (isAdmin) {
+        const translationView = document.getElementById('modal-translation-view');
+        const translationEdit = document.getElementById('modal-translation-edit');
+        if (translationView) translationView.textContent = translation || 'Не указан';
+        if (translationEdit) translationEdit.value = translation || '';
+    } else {
+        const translationEl = document.getElementById('modal-translation');
+        if (translationEl) translationEl.textContent = translation || 'Не указан';
+    }
+    
+    // Чтение - всегда показываем
     const readingContainer = document.getElementById('modal-reading-container');
-    if (reading && reading.trim() !== '') {
-        if (readingEl) readingEl.textContent = reading;
-        if (readingContainer) readingContainer.classList.remove('hidden');
+    if (readingContainer) readingContainer.classList.remove('hidden');
+    if (isAdmin) {
+        const readingView = document.getElementById('modal-reading-view');
+        const readingEdit = document.getElementById('modal-reading-edit');
+        if (readingView) readingView.textContent = reading || 'Не указано';
+        if (readingEdit) readingEdit.value = reading || '';
     } else {
-        if (readingContainer) readingContainer.classList.add('hidden');
+        const readingEl = document.getElementById('modal-reading');
+        if (readingEl) readingEl.textContent = reading || 'Не указано';
     }
     
-    // Примеры слов
-    const descriptionEl = document.getElementById('modal-description');
+    // Примеры слов - всегда показываем
     const descriptionContainer = document.getElementById('modal-description-container');
-    if (description && description.trim() !== '') {
-        if (descriptionEl) descriptionEl.textContent = description;
-        if (descriptionContainer) descriptionContainer.classList.remove('hidden');
+    if (descriptionContainer) descriptionContainer.classList.remove('hidden');
+    if (isAdmin) {
+        const descriptionView = document.getElementById('modal-description-view');
+        const descriptionEdit = document.getElementById('modal-description-edit');
+        if (descriptionView) descriptionView.textContent = description || 'Нет примеров';
+        if (descriptionEdit) descriptionEdit.value = description || '';
     } else {
-        if (descriptionContainer) descriptionContainer.classList.add('hidden');
+        const descriptionEl = document.getElementById('modal-description');
+        if (descriptionEl) descriptionEl.textContent = description || 'Нет примеров';
     }
     
-    // Уровень JLPT
-    const jlptEl = document.getElementById('modal-jlpt');
+    // Уровень JLPT - всегда показываем
     const jlptContainer = document.getElementById('modal-jlpt-container');
-    if (jlptLevel && jlptLevel !== '') {
-        if (jlptEl) jlptEl.textContent = 'N' + jlptLevel;
-        if (jlptContainer) jlptContainer.classList.remove('hidden');
+    if (jlptContainer) jlptContainer.classList.remove('hidden');
+    if (isAdmin) {
+        const jlptView = document.getElementById('modal-jlpt-view');
+        const jlptEdit = document.getElementById('modal-jlpt-edit');
+        if (jlptView) jlptView.textContent = (jlptLevel && jlptLevel !== '') ? 'N' + jlptLevel : 'Не указан';
+        if (jlptEdit) jlptEdit.value = jlptLevel || '';
     } else {
-        if (jlptContainer) jlptContainer.classList.add('hidden');
+        const jlptEl = document.getElementById('modal-jlpt');
+        if (jlptEl) jlptEl.textContent = (jlptLevel && jlptLevel !== '') ? 'N' + jlptLevel : 'Не указан';
+    }
+
+    // Следующее повторение
+    const nextReviewEl = document.getElementById('modal-next-review');
+    const nextReviewContainer = document.getElementById('modal-next-review-container');
+    if (nextReview && nextReview.trim() !== '' && isCompleted !== '1') {
+        if (nextReviewEl) nextReviewEl.textContent = nextReview;
+        if (nextReviewContainer) nextReviewContainer.classList.remove('hidden');
+    } else {
+        if (nextReviewContainer) nextReviewContainer.classList.add('hidden');
     }
     
-    // Мнемоника
-    const mnemonicEl = document.getElementById('modal-mnemonic');
+    // Мнемоника - всегда показываем
     const mnemonicContainer = document.getElementById('modal-mnemonic-container');
-    if (mnemonic && mnemonic.trim() !== '') {
-        if (mnemonicEl) mnemonicEl.textContent = mnemonic;
-        if (mnemonicContainer) mnemonicContainer.classList.remove('hidden');
+    if (mnemonicContainer) mnemonicContainer.classList.remove('hidden');
+    if (isAdmin) {
+        const mnemonicView = document.getElementById('modal-mnemonic-view');
+        const mnemonicEdit = document.getElementById('modal-mnemonic-edit');
+        if (mnemonicView) {
+            if (mnemonic && mnemonic.trim() !== '') {
+                mnemonicView.textContent = mnemonic;
+                mnemonicView.classList.remove('text-gray-500', 'italic');
+            } else {
+                mnemonicView.textContent = 'Подсказка отсутствует';
+                mnemonicView.classList.add('text-gray-500', 'italic');
+            }
+        }
+        if (mnemonicEdit) mnemonicEdit.value = mnemonic || '';
     } else {
-        if (mnemonicContainer) mnemonicContainer.classList.add('hidden');
+        const mnemonicEl = document.getElementById('modal-mnemonic');
+        if (mnemonicEl) {
+            if (mnemonic && mnemonic.trim() !== '') {
+                mnemonicEl.textContent = mnemonic;
+            } else {
+                mnemonicEl.textContent = 'Подсказка отсутствует';
+                mnemonicEl.classList.add('text-gray-500', 'italic');
+            }
+        }
     }
     
     // Изображение
@@ -407,12 +640,13 @@ window.openKanjiModal = function(kanjiItem) {
     setTimeout(() => {
         modal.focus();
         console.log('Фокус установлен на модальное окно');
-    }, 100);
-    
-    // Делаем модальное окно focusable и устанавливаем фокус для обработки Ctrl+V
-    modal.setAttribute('tabindex', '-1');
-    setTimeout(() => {
-        modal.focus();
+        
+        // Переключаем в режим просмотра после открытия (для админа)
+        @if($isAdmin ?? false)
+        if (typeof window.exitEditMode === 'function') {
+            window.exitEditMode();
+        }
+        @endif
     }, 100);
 };
 
@@ -727,6 +961,165 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     @endif
     
+    // Кнопка редактирования
+    @if($isAdmin ?? false)
+    const editKanjiBtn = document.getElementById('edit-kanji-btn');
+    if (editKanjiBtn) {
+        editKanjiBtn.addEventListener('click', function() {
+            if (typeof window.enterEditMode === 'function') {
+                window.enterEditMode();
+            }
+        });
+    }
+    
+    // Кнопка отмены редактирования
+    const cancelEditBtn = document.getElementById('cancel-edit-btn');
+    if (cancelEditBtn) {
+        cancelEditBtn.addEventListener('click', function() {
+            if (typeof window.restoreOriginalData === 'function') {
+                window.restoreOriginalData();
+            }
+            if (typeof window.exitEditMode === 'function') {
+                window.exitEditMode();
+            }
+        });
+    }
+    @endif
+    
+    // Кнопка сохранения изменений
+    @if($isAdmin ?? false)
+    const saveKanjiBtn = document.getElementById('save-kanji-btn');
+    if (saveKanjiBtn) {
+        saveKanjiBtn.addEventListener('click', function() {
+            if (!currentKanji) return;
+            
+            const translation = document.getElementById('modal-translation-edit')?.value || '';
+            const reading = document.getElementById('modal-reading-edit')?.value || '';
+            const description = document.getElementById('modal-description-edit')?.value || '';
+            const mnemonic = document.getElementById('modal-mnemonic-edit')?.value || '';
+            const jlptLevel = document.getElementById('modal-jlpt-edit')?.value || '';
+            
+            this.disabled = true;
+            this.textContent = 'Сохраняю...';
+            
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+            
+            fetch('{{ route("kanji.quick-update") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    kanji: currentKanji,
+                    translation_ru: translation,
+                    reading: reading,
+                    description: description,
+                    mnemonic: mnemonic,
+                    jlpt_level: jlptLevel ? parseInt(jlptLevel) : null,
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Обновляем data-атрибуты в таблице и originalData для текущего кандзи
+                    const kanjiItem = document.querySelector(`.kanji-item[data-kanji="${currentKanji}"]`);
+                    if (kanjiItem && data.kanji) {
+                        if (data.kanji.translation_ru) {
+                            kanjiItem.setAttribute('data-translation', data.kanji.translation_ru);
+                            @if($isAdmin ?? false)
+                            if (typeof originalData !== 'undefined') {
+                                originalData.translation = data.kanji.translation_ru;
+                            }
+                            @endif
+                        }
+                        if (data.kanji.reading !== undefined) {
+                            kanjiItem.setAttribute('data-reading', data.kanji.reading || '');
+                            @if($isAdmin ?? false)
+                            if (typeof originalData !== 'undefined') {
+                                originalData.reading = data.kanji.reading || '';
+                            }
+                            @endif
+                        }
+                        if (data.kanji.description !== undefined) {
+                            kanjiItem.setAttribute('data-description', data.kanji.description || '');
+                            @if($isAdmin ?? false)
+                            if (typeof originalData !== 'undefined') {
+                                originalData.description = data.kanji.description || '';
+                            }
+                            @endif
+                        }
+                        if (data.kanji.mnemonic !== undefined) {
+                            kanjiItem.setAttribute('data-mnemonic', data.kanji.mnemonic || '');
+                            @if($isAdmin ?? false)
+                            if (typeof originalData !== 'undefined') {
+                                originalData.mnemonic = data.kanji.mnemonic || '';
+                            }
+                            @endif
+                        }
+                        if (data.kanji.jlpt_level !== undefined) {
+                            kanjiItem.setAttribute('data-jlpt-level', data.kanji.jlpt_level || '');
+                            @if($isAdmin ?? false)
+                            if (typeof originalData !== 'undefined') {
+                                originalData.jlptLevel = data.kanji.jlpt_level || '';
+                            }
+                            @endif
+                        }
+                    }
+                    
+                    // Обновляем view элементы с новыми данными
+                    const translationView = document.getElementById('modal-translation-view');
+                    const readingView = document.getElementById('modal-reading-view');
+                    const descriptionView = document.getElementById('modal-description-view');
+                    const jlptView = document.getElementById('modal-jlpt-view');
+                    const mnemonicView = document.getElementById('modal-mnemonic-view');
+                    
+                    if (translationView && data.kanji.translation_ru) {
+                        translationView.textContent = data.kanji.translation_ru || 'Не указан';
+                    }
+                    if (readingView && data.kanji.reading !== undefined) {
+                        readingView.textContent = data.kanji.reading || 'Не указано';
+                    }
+                    if (descriptionView && data.kanji.description !== undefined) {
+                        descriptionView.textContent = data.kanji.description || 'Нет примеров';
+                    }
+                    if (jlptView && data.kanji.jlpt_level !== undefined) {
+                        jlptView.textContent = (data.kanji.jlpt_level && data.kanji.jlpt_level !== '') ? 'N' + data.kanji.jlpt_level : 'Не указан';
+                    }
+                    if (mnemonicView && data.kanji.mnemonic !== undefined) {
+                        if (data.kanji.mnemonic && data.kanji.mnemonic.trim() !== '') {
+                            mnemonicView.textContent = data.kanji.mnemonic;
+                            mnemonicView.classList.remove('text-gray-500', 'italic');
+                        } else {
+                            mnemonicView.textContent = 'Подсказка отсутствует';
+                            mnemonicView.classList.add('text-gray-500', 'italic');
+                        }
+                    }
+                    
+                    // Переключаем обратно в режим просмотра
+                    if (typeof window.exitEditMode === 'function') {
+                        window.exitEditMode();
+                    }
+                    
+                    alert('Кандзи успешно обновлен!');
+                    this.disabled = false;
+                } else {
+                    alert(data.error || 'Ошибка при сохранении');
+                    this.disabled = false;
+                    this.textContent = '💾 Сохранить изменения';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Ошибка при сохранении кандзи');
+                this.disabled = false;
+                this.textContent = '💾 Сохранить изменения';
+            });
+        });
+    }
+    @endif
+    
     // Кнопка отметки как изученное
     const markCompletedBtn = document.getElementById('mark-completed-btn');
     if (markCompletedBtn) {
@@ -764,6 +1157,87 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('Ошибка при отметке кандзи');
                 this.disabled = false;
                 this.textContent = 'Отметить как изученное';
+            });
+        });
+    }
+    
+    // Функция переключения выбора кандзи для изучения
+    window.toggleKanjiStudySelection = function(checkbox) {
+        const kanji = checkbox.getAttribute('data-kanji');
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+        
+        // Сохраняем предыдущее состояние на случай ошибки
+        const previousState = checkbox.checked;
+        
+        fetch('{{ route("kanji.toggle-study-selection") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                kanji: kanji
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Обновляем data-атрибут у родительской ячейки
+                const cell = checkbox.closest('.kanji-item');
+                if (cell) {
+                    cell.setAttribute('data-is-selected', data.is_selected ? '1' : '0');
+                }
+                console.log(data.message);
+            } else {
+                // Возвращаем предыдущее состояние при ошибке
+                checkbox.checked = !previousState;
+                alert(data.error || 'Ошибка при изменении статуса');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // Возвращаем предыдущее состояние при ошибке
+            checkbox.checked = !previousState;
+            alert('Ошибка при изменении статуса');
+        });
+    };
+
+    // Переключатель режима выбора кандзи
+    const selectionToggle = document.getElementById('toggle-selection-mode');
+    if (selectionToggle) {
+        selectionToggle.addEventListener('change', function() {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+            const enabled = !!this.checked;
+
+            fetch('{{ route("kanji.update-settings") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    use_kanji_selection: enabled ? 1 : 0
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    this.checked = !enabled;
+                    alert(data.error || 'Ошибка сохранения настройки');
+                    return;
+                }
+
+                // Показываем/скрываем галочки в таблице
+                document.querySelectorAll('.kanji-selection-overlay').forEach(el => {
+                    el.style.display = enabled ? '' : 'none';
+                });
+            })
+            .catch(err => {
+                console.error(err);
+                this.checked = !enabled;
+                alert('Ошибка сохранения настройки');
             });
         });
     }

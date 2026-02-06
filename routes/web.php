@@ -7,6 +7,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\StoryController;
 use App\Http\Controllers\StudyController;
 use App\Http\Controllers\KanjiController;
+use App\Http\Controllers\ConjugationController;
 use App\Http\Controllers\AudioController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminStoryController;
@@ -45,8 +46,10 @@ Route::middleware('auth')->group(function () {
     
     // Рассказы
     Route::get('/stories', [StoryController::class, 'index'])->name('stories.index');
-    Route::get('/stories/{id}', [StoryController::class, 'show'])->name('stories.show');
-    Route::post('/stories/{id}/mark-as-read', [StoryController::class, 'markAsRead'])->name('stories.mark-as-read');
+    // Эндпоинт для чтения слов (должен идти ДО /stories/{id}, чтобы не совпадал с ним)
+    Route::get('/stories/word-reading', [StoryController::class, 'getWordReading'])->name('stories.word-reading');
+    Route::get('/stories/{id}', [StoryController::class, 'show'])->where('id', '[0-9]+')->name('stories.show');
+    Route::post('/stories/{id}/mark-as-read', [StoryController::class, 'markAsRead'])->where('id', '[0-9]+')->name('stories.mark-as-read');
     
     // Изучение слов
     Route::get('/study', [StudyController::class, 'index'])->name('study.index');
@@ -65,6 +68,15 @@ Route::middleware('auth')->group(function () {
     Route::get('/kanji/get-question', [KanjiController::class, 'getQuestion'])->name('kanji.get-question');
     Route::post('/kanji/submit-answer', [KanjiController::class, 'submitAnswer'])->name('kanji.submit-answer');
     Route::post('/kanji/mark-completed', [KanjiController::class, 'markAsCompleted'])->name('kanji.mark-completed');
+    Route::post('/kanji/toggle-study-selection', [KanjiController::class, 'toggleStudySelection'])->name('kanji.toggle-study-selection');
+    Route::post('/kanji/update-settings', [KanjiController::class, 'updateKanjiSettings'])->name('kanji.update-settings');
+    Route::post('/kanji/quick-update', [KanjiController::class, 'quickUpdate'])->name('kanji.quick-update');
+    
+    // Тренировка спряжений
+    Route::get('/conjugation', [ConjugationController::class, 'index'])->name('conjugation.index');
+    Route::get('/conjugation/guide', [ConjugationController::class, 'guide'])->name('conjugation.guide');
+    Route::get('/conjugation/get-question', [ConjugationController::class, 'getQuestion'])->name('conjugation.get-question');
+    Route::post('/conjugation/check-answer', [ConjugationController::class, 'checkAnswer'])->name('conjugation.check-answer');
 });
 
 // Админ панель

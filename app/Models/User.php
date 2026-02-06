@@ -24,6 +24,7 @@ class User extends Authenticatable
         'password',
         'is_admin',
         'daily_words_quota',
+        'use_kanji_selection',
     ];
 
     /**
@@ -47,6 +48,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
+            'use_kanji_selection' => 'boolean',
         ];
     }
 
