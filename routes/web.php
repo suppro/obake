@@ -4,13 +4,9 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\DictionaryController;
 use App\Http\Controllers\HomeController;
-use App\Http\Controllers\StoryController;
 use App\Http\Controllers\StudyController;
 use App\Http\Controllers\KanjiController;
-use App\Http\Controllers\ConjugationController;
 use App\Http\Controllers\AudioController;
-use App\Http\Controllers\Admin\AdminDashboardController;
-use App\Http\Controllers\Admin\AdminStoryController;
 use Illuminate\Support\Facades\Route;
 
 // Welcome страница (доступна всем)
@@ -35,21 +31,17 @@ Route::get('/audio/{path}', [AudioController::class, 'serve'])
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [HomeController::class, 'dashboard'])->name('dashboard');
     
-    // Словарь пользователя
-    Route::get('/dictionary', [DictionaryController::class, 'index'])->name('dictionary.index');
+    // Словарь: функционал на странице «Слова» (Кандзи), редирект старой страницы
+    Route::get('/dictionary', function () {
+        return redirect()->route('kanji.index', ['tab' => 'words']);
+    })->name('dictionary.index');
     Route::post('/dictionary/add', [DictionaryController::class, 'addWord'])->name('dictionary.add');
     Route::get('/dictionary/lookup', [DictionaryController::class, 'lookupWord'])->name('dictionary.lookup');
+    Route::get('/dictionary/{wordId}/data', [DictionaryController::class, 'getWordData'])->name('dictionary.data');
     Route::post('/dictionary/mark-completed', [DictionaryController::class, 'markAsCompleted'])->name('dictionary.mark-completed');
     Route::get('/dictionary/{wordId}/edit', [DictionaryController::class, 'edit'])->name('dictionary.edit');
     Route::put('/dictionary/{wordId}', [DictionaryController::class, 'update'])->name('dictionary.update');
     Route::delete('/dictionary/{wordId}', [DictionaryController::class, 'removeWord'])->name('dictionary.remove');
-    
-    // Рассказы
-    Route::get('/stories', [StoryController::class, 'index'])->name('stories.index');
-    // Эндпоинт для чтения слов (должен идти ДО /stories/{id}, чтобы не совпадал с ним)
-    Route::get('/stories/word-reading', [StoryController::class, 'getWordReading'])->name('stories.word-reading');
-    Route::get('/stories/{id}', [StoryController::class, 'show'])->where('id', '[0-9]+')->name('stories.show');
-    Route::post('/stories/{id}/mark-as-read', [StoryController::class, 'markAsRead'])->where('id', '[0-9]+')->name('stories.mark-as-read');
     
     // Изучение слов
     Route::get('/study', [StudyController::class, 'index'])->name('study.index');
@@ -65,28 +57,13 @@ Route::middleware('auth')->group(function () {
     // Изучение кандзи
     Route::get('/kanji', [KanjiController::class, 'index'])->name('kanji.index');
     Route::get('/kanji/quiz', [KanjiController::class, 'quiz'])->name('kanji.quiz');
+    Route::get('/kanji/word-quiz', [KanjiController::class, 'wordQuiz'])->name('kanji.word-quiz');
     Route::get('/kanji/get-question', [KanjiController::class, 'getQuestion'])->name('kanji.get-question');
+    Route::get('/kanji/get-word-question', [KanjiController::class, 'getWordQuestion'])->name('kanji.get-word-question');
     Route::post('/kanji/submit-answer', [KanjiController::class, 'submitAnswer'])->name('kanji.submit-answer');
+    Route::post('/kanji/submit-word-answer', [KanjiController::class, 'submitWordAnswer'])->name('kanji.submit-word-answer');
     Route::post('/kanji/mark-completed', [KanjiController::class, 'markAsCompleted'])->name('kanji.mark-completed');
     Route::post('/kanji/toggle-study-selection', [KanjiController::class, 'toggleStudySelection'])->name('kanji.toggle-study-selection');
     Route::post('/kanji/update-settings', [KanjiController::class, 'updateKanjiSettings'])->name('kanji.update-settings');
     Route::post('/kanji/quick-update', [KanjiController::class, 'quickUpdate'])->name('kanji.quick-update');
-    
-    // Тренировка спряжений
-    Route::get('/conjugation', [ConjugationController::class, 'index'])->name('conjugation.index');
-    Route::get('/conjugation/guide', [ConjugationController::class, 'guide'])->name('conjugation.guide');
-    Route::get('/conjugation/get-question', [ConjugationController::class, 'getQuestion'])->name('conjugation.get-question');
-    Route::post('/conjugation/check-answer', [ConjugationController::class, 'checkAnswer'])->name('conjugation.check-answer');
-});
-
-// Админ панель
-Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
-    Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
-    
-    // CRUD для рассказов
-    Route::resource('stories', AdminStoryController::class);
-    
-    // CRUD для кандзи
-    Route::resource('kanji', \App\Http\Controllers\Admin\AdminKanjiController::class);
-    Route::post('/kanji/update-image', [\App\Http\Controllers\Admin\AdminKanjiController::class, 'updateImage'])->name('kanji.update-image');
 });

@@ -4,11 +4,24 @@
 
 @section('content')
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="mb-8">
-        <h1 class="text-4xl font-bold text-purple-400 mb-2">📚 Изучение кандзи</h1>
-        <p class="text-gray-400">Изучайте кандзи в формате квиза</p>
+    <div class="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <h1 class="text-4xl font-bold text-purple-400 mb-2">📚 Изучение кандзи и слов</h1>
+            <p class="text-gray-400">Изучайте кандзи и слова из вашего словаря в формате квиза</p>
+        </div>
+        <!-- Вкладки: Кандзи / Слова -->
+        <div class="flex rounded-xl bg-gray-800/50 border border-gray-700 p-1">
+            <a href="{{ route('kanji.index', array_filter(['jlpt_level' => $jlptLevel ?? null, 'search' => $search ?? null])) }}" class="px-5 py-2.5 rounded-lg font-semibold transition {{ request('tab') !== 'words' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white' }}">
+                Кандзи
+            </a>
+            <a href="{{ route('kanji.index', array_merge(request()->only(['jlpt_level', 'search']), ['tab' => 'words', 'word_search' => $wordSearch ?? '', 'word_type' => $wordTypeFilter ?? ''])) }}" class="px-5 py-2.5 rounded-lg font-semibold transition {{ request('tab') === 'words' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white' }}">
+                Слова
+            </a>
+        </div>
     </div>
 
+    <!-- Блок: Кандзи -->
+    <div id="panel-kanji" class="tab-panel {{ request('tab') !== 'words' ? '' : 'hidden' }}">
     <!-- Фильтр по JLPT -->
     <div class="mb-6 bg-gray-800/50 rounded-xl p-6 border border-gray-700">
         <h3 class="text-xl font-bold text-purple-400 mb-4">Уровень JLPT</h3>
@@ -199,6 +212,180 @@
             </div>
         @endforeach
     </div>
+    </div>
+    <!-- Конец блока Кандзи -->
+
+    <!-- Блок: Слова -->
+    <div id="panel-words" class="tab-panel {{ request('tab') === 'words' ? '' : 'hidden' }}">
+        <div class="mb-6 bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+            <h3 class="text-xl font-bold text-purple-400 mb-4">Поиск слов</h3>
+            <form method="GET" action="{{ route('kanji.index') }}" id="word-search-form">
+                <input type="hidden" name="tab" value="words">
+                <div class="flex flex-wrap items-center gap-4">
+                    <input type="text"
+                           name="word_search"
+                           id="word-search-input"
+                           placeholder="Слово, чтение или перевод..."
+                           value="{{ $wordSearch ?? '' }}"
+                           class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <select name="word_type" class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="">Все типы</option>
+                        @foreach($wordTypes ?? [] as $wt)
+                            <option value="{{ $wt }}" {{ ($wordTypeFilter ?? '') === $wt ? 'selected' : '' }}>{{ $wt }}</option>
+                        @endforeach
+                    </select>
+                    <button type="submit" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-3 rounded-lg transition-all">
+                        Найти
+                    </button>
+                    @if(($wordSearch ?? '') !== '' || ($wordTypeFilter ?? '') !== '')
+                        <a href="{{ route('kanji.index', ['tab' => 'words']) }}" class="bg-gray-600 hover:bg-gray-500 text-white font-semibold px-6 py-3 rounded-lg transition-all">
+                            Очистить
+                        </a>
+                    @endif
+                </div>
+            </form>
+        </div>
+
+        <div class="mb-6 bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+            <h3 class="text-xl font-bold text-purple-400 mb-4">Начать квиз по словам</h3>
+            <form action="{{ route('kanji.word-quiz') }}" method="GET" class="flex flex-wrap items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <label class="text-gray-300">Количество:</label>
+                    <input type="number" name="count" value="10" min="1" max="50" class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white w-24 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-gray-300">Тип слова:</label>
+                    <select name="word_type" class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="">Все</option>
+                        @foreach($wordTypes ?? [] as $wt)
+                            <option value="{{ $wt }}">{{ $wt }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <button type="submit" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-3 rounded-lg transition-all">
+                    Начать квиз по словам
+                </button>
+            </form>
+        </div>
+
+        <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+            <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+                <h3 class="text-xl font-bold text-purple-400">Список слов</h3>
+                <button type="button" id="btn-add-word" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-5 py-2.5 rounded-lg transition-all">
+                    ＋ Добавить слово
+                </button>
+            </div>
+            @if(isset($wordsList) && $wordsList->isNotEmpty())
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" id="words-list-body">
+                    @foreach($wordsList as $w)
+                        <div class="word-card bg-gray-700/50 border border-gray-600 rounded-xl p-4 hover:border-purple-500/50 transition-all flex flex-col" data-word-id="{{ $w['id'] }}" data-word="{{ $w['japanese_word'] }}" data-reading="{{ $w['reading'] }}" data-translation="{{ e($w['translation_ru']) }}">
+                            <div class="flex items-start justify-between gap-2 mb-2">
+                                <div class="min-w-0 flex-1">
+                                    <div class="text-2xl font-bold text-white japanese-font truncate" style="font-family: 'Noto Sans JP', sans-serif;">{{ $w['japanese_word'] }}</div>
+                                    @if($w['reading'])
+                                        <div class="text-sm text-gray-400 japanese-font">{{ $w['reading'] }}</div>
+                                    @endif
+                                </div>
+                                <div class="flex gap-1 flex-shrink-0">
+                                    <button type="button" class="word-edit-btn text-blue-400 hover:text-blue-300 p-1 rounded" title="Редактировать" data-word-id="{{ $w['id'] }}">✏️</button>
+                                    <form method="POST" action="{{ route('dictionary.remove', $w['id']) }}" class="inline word-remove-form" onsubmit="return confirm('Удалить слово из словаря?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="text-red-400 hover:text-red-300 p-1 rounded" title="Удалить">🗑️</button>
+                                    </form>
+                                </div>
+                            </div>
+                            <div class="text-gray-300 text-sm mb-3 line-clamp-2 flex-1">{{ $w['translation_ru'] }}</div>
+                            <div class="mt-auto">
+                                <div style="width: 100%; height: 6px; background-color: rgba(75, 85, 99, 0.5); border-radius: 9999px; overflow: hidden; position: relative;">
+                                    <div style="height: 100%; width: {{ $w['progress_percent'] }}%; background: linear-gradient(90deg, #a855f7 0%, #6366f1 100%); border-radius: 9999px; transition: width 0.3s ease; box-shadow: 0 0 4px rgba(168, 85, 247, 0.4);"></div>
+                                </div>
+                                <span class="text-xs text-gray-500 mt-0.5">{{ (int)$w['progress_percent'] }}%</span>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @else
+                <p class="text-gray-400">В вашем словаре пока нет слов. Нажмите «Добавить слово», чтобы добавить первое.</p>
+            @endif
+        </div>
+    </div>
+
+    <!-- Модальное окно: добавить слово -->
+    <div id="modal-add-word" class="fixed inset-0 bg-black/60 z-[9998] items-center justify-center p-4 hidden" style="display: none;">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full border border-gray-700">
+            <div class="p-6 border-b border-gray-700 flex justify-between items-center">
+                <h3 class="text-xl font-bold text-purple-400">Добавить слово</h3>
+                <button type="button" id="modal-add-word-close" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="p-6">
+                <label class="block text-gray-300 mb-2">Слово на японском</label>
+                <input type="text" id="add-word-input" placeholder="私 или わたし" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white japanese-font focus:outline-none focus:ring-2 focus:ring-purple-500">
+                <p class="text-gray-500 text-sm mt-1">Будет выполнен поиск по словарю; при отсутствии — слово будет создано.</p>
+                <div class="mt-4 flex gap-3">
+                    <button type="button" id="add-word-submit" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-5 py-2.5 rounded-lg transition">Добавить</button>
+                    <button type="button" id="add-word-cancel" class="bg-gray-600 hover:bg-gray-500 text-white px-5 py-2.5 rounded-lg transition">Отмена</button>
+                </div>
+                <p id="add-word-message" class="mt-2 text-sm hidden"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно: редактировать слово -->
+    <div id="modal-edit-word" class="fixed inset-0 bg-black/60 z-[9998] items-center justify-center p-4 hidden overflow-y-auto" style="display: none;">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full border border-gray-700 my-8">
+            <div class="p-6 border-b border-gray-700 flex justify-between items-center">
+                <h3 class="text-xl font-bold text-purple-400">Редактировать слово</h3>
+                <button type="button" id="modal-edit-word-close" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="p-6">
+                <input type="hidden" id="edit-word-id">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-gray-300 mb-1">Японское слово *</label>
+                        <input type="text" id="edit-japanese-word" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white japanese-font focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div>
+                        <label class="block text-gray-300 mb-1">Чтение (фуригана)</label>
+                        <input type="text" id="edit-reading" placeholder="わたし" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div>
+                        <label class="block text-gray-300 mb-1">Перевод на русский *</label>
+                        <textarea id="edit-translation-ru" rows="2" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-gray-300 mb-1">Перевод на английский</label>
+                        <textarea id="edit-translation-en" rows="2" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-gray-300 mb-1">Тип слова</label>
+                        <select id="edit-word-type" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <option value="">— не указан —</option>
+                            <option value="Глагол">Глагол</option>
+                            <option value="い-прилагательное">い-прилагательное</option>
+                            <option value="な-прилагательное">на-прилагательное</option>
+                            <option value="Существительное">Существительное</option>
+                            <option value="Другое">Другое</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-300 mb-1">Пример (JP)</label>
+                        <input type="text" id="edit-example-jp" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div>
+                        <label class="block text-gray-300 mb-1">Пример (RU)</label>
+                        <input type="text" id="edit-example-ru" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                </div>
+                <div class="mt-6 flex gap-3">
+                    <button type="button" id="edit-word-submit" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-5 py-2.5 rounded-lg transition">Сохранить</button>
+                    <button type="button" id="edit-word-cancel" class="bg-gray-600 hover:bg-gray-500 text-white px-5 py-2.5 rounded-lg transition">Отмена</button>
+                </div>
+                <p id="edit-word-message" class="mt-2 text-sm hidden"></p>
+            </div>
+        </div>
+    </div>
+    <!-- Конец блока Слова -->
 </div>
 
 <!-- Модальное окно с деталями кандзи -->
@@ -1239,6 +1426,141 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.checked = !enabled;
                 alert('Ошибка сохранения настройки');
             });
+        });
+    }
+
+    // --- Слова: модалки добавления и редактирования ---
+    const modalAddWord = document.getElementById('modal-add-word');
+    const modalEditWord = document.getElementById('modal-edit-word');
+    if (modalAddWord) {
+        document.getElementById('btn-add-word')?.addEventListener('click', function() {
+            modalAddWord.classList.remove('hidden');
+            modalAddWord.style.display = 'flex';
+            document.getElementById('add-word-input').value = '';
+            document.getElementById('add-word-message').classList.add('hidden');
+        });
+        document.getElementById('modal-add-word-close')?.addEventListener('click', function() {
+            modalAddWord.classList.add('hidden');
+            modalAddWord.style.display = 'none';
+        });
+        document.getElementById('add-word-cancel')?.addEventListener('click', function() {
+            modalAddWord.classList.add('hidden');
+            modalAddWord.style.display = 'none';
+        });
+        document.getElementById('add-word-submit')?.addEventListener('click', function() {
+            const input = document.getElementById('add-word-input');
+            const japaneseWord = (input?.value || '').trim();
+            if (!japaneseWord) {
+                document.getElementById('add-word-message').textContent = 'Введите слово.';
+                document.getElementById('add-word-message').classList.remove('hidden');
+                return;
+            }
+            this.disabled = true;
+            const msgEl = document.getElementById('add-word-message');
+            fetch('{{ route("dictionary.add") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ japanese_word: japaneseWord })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    modalAddWord.classList.add('hidden');
+                    modalAddWord.style.display = 'none';
+                    window.location.reload();
+                } else {
+                    msgEl.textContent = data.error || 'Ошибка добавления';
+                    msgEl.classList.remove('hidden');
+                }
+            })
+            .catch(() => {
+                msgEl.textContent = 'Ошибка сети';
+                msgEl.classList.remove('hidden');
+            })
+            .finally(() => { this.disabled = false; });
+        });
+    }
+    if (modalEditWord) {
+        document.getElementById('modal-edit-word-close')?.addEventListener('click', function() {
+            modalEditWord.classList.add('hidden');
+            modalEditWord.style.display = 'none';
+        });
+        document.getElementById('edit-word-cancel')?.addEventListener('click', function() {
+            modalEditWord.classList.add('hidden');
+            modalEditWord.style.display = 'none';
+        });
+        document.querySelectorAll('.word-edit-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const wordId = this.getAttribute('data-word-id');
+                fetch('{{ url("/dictionary") }}/' + wordId + '/data', {
+                    headers: { 'Accept': 'application/json' }
+                })
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('edit-word-id').value = data.id;
+                    document.getElementById('edit-japanese-word').value = data.japanese_word || '';
+                    document.getElementById('edit-reading').value = data.reading || '';
+                    document.getElementById('edit-translation-ru').value = data.translation_ru || '';
+                    document.getElementById('edit-translation-en').value = data.translation_en || '';
+                    document.getElementById('edit-word-type').value = data.word_type || '';
+                    document.getElementById('edit-example-jp').value = data.example_jp || '';
+                    document.getElementById('edit-example-ru').value = data.example_ru || '';
+                    document.getElementById('edit-word-message').classList.add('hidden');
+                    modalEditWord.classList.remove('hidden');
+                    modalEditWord.style.display = 'flex';
+                })
+                .catch(() => alert('Не удалось загрузить слово'));
+            });
+        });
+        document.getElementById('edit-word-submit')?.addEventListener('click', function() {
+            const wordId = document.getElementById('edit-word-id').value;
+            const payload = {
+                japanese_word: document.getElementById('edit-japanese-word').value,
+                reading: document.getElementById('edit-reading').value,
+                translation_ru: document.getElementById('edit-translation-ru').value,
+                translation_en: document.getElementById('edit-translation-en').value,
+                word_type: document.getElementById('edit-word-type').value,
+                _token: document.querySelector('meta[name="csrf-token"]').content
+            };
+            this.disabled = true;
+            const msgEl = document.getElementById('edit-word-message');
+            fetch('{{ url("/dictionary") }}/' + wordId, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': payload._token,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    japanese_word: payload.japanese_word,
+                    reading: payload.reading,
+                    translation_ru: payload.translation_ru,
+                    translation_en: payload.translation_en,
+                    word_type: payload.word_type,
+                    example_jp: document.getElementById('edit-example-jp').value,
+                    example_ru: document.getElementById('edit-example-ru').value
+                })
+            })
+            .then(r => r.json().catch(() => ({})))
+            .then(data => {
+                if (data.success) {
+                    modalEditWord.classList.add('hidden');
+                    modalEditWord.style.display = 'none';
+                    window.location.reload();
+                } else {
+                    msgEl.textContent = (data.errors && Object.values(data.errors).flat()[0]) || data.message || 'Ошибка сохранения';
+                    msgEl.classList.remove('hidden');
+                }
+            })
+            .catch(() => {
+                msgEl.textContent = 'Ошибка сети';
+                msgEl.classList.remove('hidden');
+            })
+            .finally(() => { this.disabled = false; });
         });
     }
 });

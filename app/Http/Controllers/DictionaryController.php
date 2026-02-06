@@ -172,7 +172,7 @@ class DictionaryController extends Controller
         $user = Auth::user();
         $user->dictionary()->detach($wordId);
 
-        return redirect()->back()->with('success', 'Слово удалено из словаря');
+        return redirect()->route('kanji.index', ['tab' => 'words'])->with('success', 'Слово удалено из словаря');
     }
 
     public function markAsCompleted(Request $request)
@@ -212,16 +212,30 @@ class DictionaryController extends Controller
     }
     
     /**
-     * Показать форму редактирования слова
+     * Получить данные слова для модального редактирования (JSON)
+     */
+    public function getWordData($wordId)
+    {
+        $user = Auth::user();
+        $word = $user->dictionary()->where('global_dictionary.id', $wordId)->firstOrFail();
+        return response()->json([
+            'id' => $word->id,
+            'japanese_word' => $word->japanese_word,
+            'reading' => $word->reading ?? '',
+            'translation_ru' => $word->translation_ru,
+            'translation_en' => $word->translation_en ?? '',
+            'word_type' => $word->word_type ?? '',
+            'example_jp' => $word->example_jp ?? '',
+            'example_ru' => $word->example_ru ?? '',
+        ]);
+    }
+
+    /**
+     * Показать форму редактирования слова (редирект на страницу слов)
      */
     public function edit($wordId)
     {
-        $user = Auth::user();
-        
-        // Проверяем, что слово в словаре пользователя
-        $word = $user->dictionary()->where('global_dictionary.id', $wordId)->firstOrFail();
-        
-        return view('dictionary.edit', compact('word'));
+        return redirect()->route('kanji.index', ['tab' => 'words'])->with('edit_word_id', $wordId);
     }
     
     /**
@@ -279,8 +293,10 @@ class DictionaryController extends Controller
             $word->audio_path = $audioPath;
             $word->save();
         }
-        
-        return redirect()->route('dictionary.index')->with('success', 'Слово успешно обновлено');
+
+        if ($request->wantsJson()) {
+            return response()->json(['success' => true, 'message' => 'Слово успешно обновлено']);
+        }
+        return redirect()->route('kanji.index', ['tab' => 'words'])->with('success', 'Слово успешно обновлено');
     }
-    
 }

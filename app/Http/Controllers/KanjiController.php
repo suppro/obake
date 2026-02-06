@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\GlobalDictionary;
 use App\Models\Kanji;
 use App\Models\KanjiStudyProgress;
+use App\Models\WordStudyProgress;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
@@ -178,7 +180,46 @@ class KanjiController extends Controller
             ->count();
         
         $isAdmin = $user->isAdmin();
-        
+
+        // Слова из словаря пользователя для раздела «Слова»
+        $wordsQuery = $user->dictionary();
+        $wordSearch = $request->get('word_search');
+        $wordTypeFilter = $request->get('word_type');
+        if ($wordSearch) {
+            $wordsQuery->where(function ($q) use ($wordSearch) {
+                $q->where('japanese_word', 'like', "%{$wordSearch}%")
+                    ->orWhere('reading', 'like', "%{$wordSearch}%")
+                    ->orWhere('translation_ru', 'like', "%{$wordSearch}%");
+            });
+        }
+        if ($wordTypeFilter && $wordTypeFilter !== '') {
+            $wordsQuery->where('word_type', $wordTypeFilter);
+        }
+        $wordsCollection = $wordsQuery->get();
+        $wordProgressMap = WordStudyProgress::where('user_id', $user->id)
+            ->whereIn('word_id', $wordsCollection->pluck('id'))
+            ->get()
+            ->keyBy('word_id');
+        $wordsList = $wordsCollection->map(function ($word) use ($wordProgressMap) {
+            $progress = $wordProgressMap->get($word->id);
+            $level = $progress ? (int) ($progress->level ?? 0) : 0;
+            $daysStudied = $progress ? (int) ($progress->days_studied ?? 0) : 0;
+            $progressPercent = min(100, max(0, (max($level, $daysStudied) / 10) * 100));
+            return [
+                'id' => $word->id,
+                'japanese_word' => $word->japanese_word,
+                'reading' => $word->reading ?? '',
+                'translation_ru' => $word->translation_ru,
+                'word_type' => $word->word_type ?? '',
+                'level' => $level,
+                'days_studied' => $daysStudied,
+                'progress_percent' => $progressPercent,
+                'is_completed' => $progress ? (bool) ($progress->is_completed ?? false) : false,
+                'next_review_at' => $progress ? $progress->next_review_at : null,
+            ];
+        })->values();
+        $wordTypes = $user->dictionary()->whereNotNull('word_type')->where('word_type', '!=', '')->distinct()->pluck('word_type')->sort()->values();
+
         return view('kanji.index', compact(
             'sortedKanjiByLevel',
             'totalKanji',
@@ -188,12 +229,16 @@ class KanjiController extends Controller
             'search',
             'isAdmin',
             'jlptLevel',
-            'useKanjiSelection'
+            'useKanjiSelection',
+            'wordsList',
+            'wordTypes',
+            'wordSearch',
+            'wordTypeFilter'
         ));
     }
 
     /**
-     * Страница квиза
+     * Страница квиза по кандзи
      */
     public function quiz(Request $request)
     {
@@ -204,6 +249,18 @@ class KanjiController extends Controller
         $quizId = (string) Str::uuid();
         
         return view('kanji.quiz', compact('count', 'jlptLevel', 'forceInputMode', 'quizId'));
+    }
+
+    /**
+     * Страница квиза по словам (тот же формат, что и квиз по кандзи)
+     */
+    public function wordQuiz(Request $request)
+    {
+        $count = (int) $request->get('count', 10);
+        $count = max(1, min(50, $count));
+        $wordType = (string) $request->get('word_type', '');
+        $quizId = (string) Str::uuid();
+        return view('kanji.word-quiz', compact('count', 'wordType', 'quizId'));
     }
 
     private function getSrsIntervalsDays(): array
@@ -643,6 +700,221 @@ class KanjiController extends Controller
         return response()->json([
             'success' => true,
             'use_kanji_selection' => $user->use_kanji_selection,
+        ]);
+    }
+
+    /**
+     * Квиз по словам: получить вопрос (формат как у кандзи)
+     */
+    public function getWordQuestion(Request $request)
+    {
+        $user = Auth::user();
+        $count = (int) $request->get('count', 10);
+        $count = max(1, min(50, $count));
+        $wordType = $request->get('word_type', '');
+        $quizId = (string) $request->get('quiz_id', '');
+        if ($quizId === '') {
+            return response()->json(['error' => 'quiz_id обязателен'], 422);
+        }
+
+        $wordsQuery = $user->dictionary();
+        if ($wordType !== '') {
+            $wordsQuery->where('word_type', $wordType);
+        }
+        $allWords = $wordsQuery->get();
+        if ($allWords->isEmpty()) {
+            return response()->json([
+                'error' => 'Нет слов для квиза. Добавьте слова в словарь или снимите фильтр по типу.',
+                'no_more_questions' => true,
+            ], 404);
+        }
+
+        $userProgress = WordStudyProgress::where('user_id', $user->id)
+            ->whereIn('word_id', $allWords->pluck('id'))
+            ->get()
+            ->keyBy('word_id');
+
+        $sessionKey = "word_quiz.{$quizId}.asked";
+        $asked = collect(session()->get($sessionKey, []))
+            ->filter(fn ($id) => is_numeric($id))
+            ->unique()
+            ->values();
+
+        $wordsWithLevels = $allWords->map(function ($word) use ($userProgress) {
+            $progress = $userProgress->get($word->id);
+            return [
+                'word_id' => $word->id,
+                'japanese_word' => $word->japanese_word,
+                'reading' => $word->reading ?? '',
+                'translation_ru' => $word->translation_ru,
+                'level' => $progress ? (int) ($progress->level ?? 0) : 0,
+                'next_review_at' => $progress ? $progress->next_review_at : null,
+                'is_completed' => $progress ? (bool) ($progress->is_completed ?? false) : false,
+            ];
+        });
+
+        $now = now();
+        $candidates = $wordsWithLevels
+            ->reject(fn ($w) => $asked->contains($w['word_id']))
+            ->reject(fn ($w) => $w['is_completed'] ?? false);
+
+        $due = $candidates
+            ->filter(fn ($w) => empty($w['next_review_at']) || ($w['next_review_at'] && $w['next_review_at']->lte($now)))
+            ->sortBy([
+                ['level', 'asc'],
+                ['next_review_at', 'asc'],
+            ])
+            ->values();
+
+        $pool = $due->isNotEmpty() ? $due : $candidates->sortBy('level')->values();
+        $wordToStudy = $pool->take(max(1, min($count, $pool->count())))->shuffle()->first();
+
+        if (!$wordToStudy) {
+            return response()->json([
+                'error' => 'Нет доступных слов для изучения',
+                'no_more_questions' => true,
+            ], 404);
+        }
+
+        $asked->push($wordToStudy['word_id']);
+        session()->put($sessionKey, $asked->unique()->values()->toArray());
+
+        // В квизе всегда: показываем русский, выбираем/пишем японское (формат 私（わたし）)
+        $questionType = 'ru_to_word';
+        $userLevel = (int) ($wordToStudy['level'] ?? 0);
+        $answerMode = $userLevel >= 5 ? 'input' : 'choices';
+
+        $displayForm = trim($wordToStudy['reading'] ?? '') !== ''
+            ? $wordToStudy['japanese_word'] . '（' . $wordToStudy['reading'] . '）'
+            : $wordToStudy['japanese_word'];
+
+        $allWordsDisplay = $allWords->map(function ($w) {
+            $r = $w->reading ?? '';
+            return trim($r) !== '' ? $w->japanese_word . '（' . $r . '）' : $w->japanese_word;
+        });
+        $answers = $answerMode === 'choices'
+            ? $this->buildAnswerOptions($displayForm, $allWordsDisplay, 6)
+            : [];
+
+        $questionId = (string) Str::uuid();
+        session()->put("word_quiz.{$quizId}.questions.{$questionId}", [
+            'word_id' => $wordToStudy['word_id'],
+            'question_type' => $questionType,
+            'correct_answer' => $wordToStudy['japanese_word'],
+            'reading' => $wordToStudy['reading'] ?? '',
+            'expires_at' => now()->addMinutes(30)->toIso8601String(),
+        ]);
+
+        return response()->json([
+            'quiz_id' => $quizId,
+            'question_id' => $questionId,
+            'word_id' => $wordToStudy['word_id'],
+            'question_type' => $questionType,
+            'answer_mode' => $answerMode,
+            'question' => $wordToStudy['translation_ru'],
+            'reading' => $wordToStudy['reading'] ?? '',
+            'answers' => $answers,
+            'correct_display' => $displayForm,
+            'user_level' => $userLevel,
+        ]);
+    }
+
+    /**
+     * Квиз по словам: отправить ответ
+     */
+    public function submitWordAnswer(Request $request)
+    {
+        $request->validate([
+            'word_id' => 'required|integer',
+            'answer' => 'required|string',
+            'quiz_id' => 'required|string',
+            'question_id' => 'required|string',
+        ]);
+
+        $user = Auth::user();
+        $wordId = (int) $request->word_id;
+        $answer = trim((string) $request->answer);
+        $quizId = (string) $request->quiz_id;
+        $questionId = (string) $request->question_id;
+
+        if (!$user->dictionary()->where('global_dictionary.id', $wordId)->exists()) {
+            return response()->json(['error' => 'Слово не в вашем словаре'], 403);
+        }
+
+        $stored = session()->get("word_quiz.{$quizId}.questions.{$questionId}");
+        if (!$stored || ($stored['word_id'] ?? null) != $wordId) {
+            return response()->json(['error' => 'Вопрос не найден или устарел'], 422);
+        }
+
+        $expiresAt = $stored['expires_at'] ?? null;
+        if (is_string($expiresAt) && now()->gt(\Illuminate\Support\Carbon::parse($expiresAt))) {
+            session()->forget("word_quiz.{$quizId}.questions.{$questionId}");
+            return response()->json(['error' => 'Вопрос устарел'], 422);
+        }
+
+        $correctWord = (string) ($stored['correct_answer'] ?? '');
+        $correctReading = (string) ($stored['reading'] ?? '');
+        $questionType = (string) ($stored['question_type'] ?? '');
+        if ($correctWord === '' || !in_array($questionType, ['word_to_ru', 'ru_to_word'], true)) {
+            return response()->json(['error' => 'Некорректный вопрос'], 422);
+        }
+
+        $word = GlobalDictionary::find($wordId);
+        if (!$word) {
+            return response()->json(['error' => 'Слово не найдено'], 404);
+        }
+
+        $isCorrect = false;
+        if ($questionType === 'word_to_ru') {
+            $isCorrect = $this->normalizeRuAnswer($answer) === $this->normalizeRuAnswer($correctWord);
+        } else {
+            // ru_to_word: засчитываем и кандзи, и фуригану, и формат 私（わたし）
+            $a = trim($answer);
+            $isCorrect = $a === $correctWord
+                || $a === $correctReading
+                || ($correctReading !== '' && $a === $correctWord . '（' . $correctReading . '）');
+            if (!$isCorrect && $correctReading !== '' && preg_match('/^(.+?)[\s]*[（(]([^）)]+)[）)]\s*$/u', $a, $m)) {
+                $isCorrect = (trim($m[1]) === $correctWord && trim($m[2]) === $correctReading);
+            }
+        }
+
+        $progress = WordStudyProgress::firstOrCreate(
+            [
+                'user_id' => $user->id,
+                'word_id' => $wordId,
+            ],
+            [
+                'started_at' => now(),
+                'days_studied' => 0,
+                'level' => 0,
+                'is_completed' => false,
+            ]
+        );
+
+        if ($isCorrect) {
+            $progress->level = min(10, $progress->level + 1);
+        } else {
+            $progress->level = max(0, $progress->level - 1);
+        }
+        $progress->last_reviewed_at = now();
+        $progress->next_review_at = $this->calcNextReviewAt((int) $progress->level, $isCorrect);
+        if ($progress->level >= 10) {
+            $progress->is_completed = true;
+        }
+        $progress->save();
+
+        session()->forget("word_quiz.{$quizId}.questions.{$questionId}");
+
+        // Для отображения правильного ответа в формате 私（わたし）
+        $correctDisplay = trim($correctReading ?? '') !== ''
+            ? $correctWord . '（' . $correctReading . '）'
+            : $correctWord;
+
+        return response()->json([
+            'correct' => $isCorrect,
+            'new_level' => $progress->level,
+            'correct_answer' => $correctDisplay,
+            'next_review_at' => $progress->next_review_at?->toIso8601String(),
         ]);
     }
 

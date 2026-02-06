@@ -15,6 +15,8 @@ class WordStudyProgress extends Model
         'started_at',
         'last_reviewed_at',
         'days_studied',
+        'level',
+        'next_review_at',
         'is_completed',
         'completed_at',
     ];
@@ -25,6 +27,8 @@ class WordStudyProgress extends Model
         'completed_at' => 'date',
         'is_completed' => 'boolean',
         'days_studied' => 'integer',
+        'level' => 'integer',
+        'next_review_at' => 'datetime',
     ];
 
     /**
