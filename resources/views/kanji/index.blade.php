@@ -69,27 +69,28 @@
     <!-- Поиск -->
     <div class="mb-6 bg-gray-800/50 rounded-xl p-6 border border-gray-700">
         <h3 class="text-xl font-bold text-purple-400 mb-4">Поиск кандзи</h3>
-        <form method="GET" action="{{ route('kanji.index') }}" id="search-form">
-            <div class="flex items-center gap-4">
-                <input type="text" 
-                       name="search"
-                       id="kanji-search" 
-                       placeholder="Введите перевод или чтение (например: замок, しろ, じょう)" 
-                       value="{{ $search ?? '' }}"
-                       class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500">
-                <button type="submit" 
-                        class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-3 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50">
-                    Найти 🔍
-                </button>
-                @if($search ?? '')
-                <a href="{{ route('kanji.index') }}" 
-                   class="bg-gray-600 hover:bg-gray-500 text-white font-semibold px-6 py-3 rounded-lg transition-all">
-                    Очистить
-                </a>
-                @endif
+        <div class="flex items-center gap-4">
+            <input type="text" 
+                   id="kanji-search" 
+                   placeholder="Введите перевод или чтение (например: замок, しろ, じょう)" 
+                   value=""
+                   class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500">
+            <button type="button" 
+                    id="kanji-search-clear"
+                    class="bg-gray-600 hover:bg-gray-500 text-white font-semibold px-6 py-3 rounded-lg transition-all hidden"
+                    onclick="document.getElementById('kanji-search').value = ''; document.getElementById('kanji-search').dispatchEvent(new Event('input'));">Очистить</button>
+        </div>
+        <p class="text-gray-400 text-sm mt-2">Поиск работает по переводу на русский и чтению (хирагана/ромадзи). Результаты выводятся в реальном времени при вводе.</p>
+        
+        <!-- Контейнер для результатов поиска -->
+        <div id="kanji-search-results" class="hidden mt-4 bg-gray-900/50 rounded-lg p-4 border border-gray-600">
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse">
+                    <tbody id="kanji-search-results-tbody">
+                    </tbody>
+                </table>
             </div>
-        </form>
-        <p class="text-gray-400 text-sm mt-2">Поиск работает по переводу на русский и чтению (хирагана/ромадзи). Фильтрация происходит в реальном времени при вводе.</p>
+        </div>
     </div>
 
     <!-- Кнопка начала квиза -->
@@ -97,6 +98,14 @@
         <h3 class="text-xl font-bold text-purple-400 mb-4">Начать квиз</h3>
         <form action="{{ route('kanji.quiz') }}" method="GET" class="space-y-4">
             <div class="flex flex-wrap items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <label class="text-gray-300">Список кандзи:</label>
+                    <select name="list_id" 
+                           id="quiz-list-select"
+                           class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="">Все кандзи</option>
+                    </select>
+                </div>
                 <div class="flex items-center gap-2">
                     <label class="text-gray-300">Количество:</label>
                     <input type="number" name="count" value="10" min="1" max="50" 
@@ -140,6 +149,60 @@
                 </button>
             </div>
         </form>
+    </div>
+
+    <!-- Управление списками кандзи -->
+    <div class="mb-8 bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-bold text-purple-400">📋 Мои списки кандзи</h3>
+            <button id="btn-create-list" 
+                    class="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-semibold px-4 py-2 rounded-lg transition-all">
+                + Создать список
+            </button>
+        </div>
+        
+        <div id="kanji-lists-container">
+            <p class="text-gray-400 text-sm">Загрузка...</p>
+        </div>
+        <script>
+            // Lightweight kanji lists loader (runs before main script)
+            (function(){
+                try {
+                    fetch('{{ route("kanji-lists.index") }}', { headers: { 'Accept': 'application/json' } })
+                    .then(r => r.json())
+                    .then(data => {
+                        const container = document.getElementById('kanji-lists-container');
+                        if (!container) return;
+                        if (!data.lists || data.lists.length === 0) {
+                            container.innerHTML = '<p class="text-gray-400">Нет списков. Создайте первый список!</p>';
+                            return;
+                        }
+                        let html = '<div class="space-y-6">';
+                        data.lists.forEach(list => {
+                            html += `
+                                <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+                                    <div class="flex items-center justify-between mb-4">
+                                        <div>
+                                            <h4 class="font-semibold text-white text-lg">${list.name}</h4>
+                                            <p class="text-gray-400 text-sm">${list.description || 'Без описания'}</p>
+                                            <p class="text-gray-500 text-xs mt-1">${list.kanji_count} кандзи</p>
+                                        </div>
+                                        <div class="flex gap-2 flex-shrink-0">
+                                            <a href="{{ route('kanji.quiz') }}?list_id=${list.id}" class="bg-purple-600 hover:bg-purple-500 px-3 py-2 rounded text-sm text-white">▶️ Квиз</a>
+                                        </div>
+                                    </div>
+                                </div>`;
+                        });
+                        html += '</div>';
+                        container.innerHTML = html;
+                    })
+                    .catch(() => {
+                        const container = document.getElementById('kanji-lists-container');
+                        if (container) container.innerHTML = '<p class="text-red-400">Ошибка загрузки списков</p>';
+                    });
+                } catch (e) { console.error(e); }
+            })();
+        </script>
     </div>
 
     <!-- Список кандзи по уровням JLPT -->
@@ -246,6 +309,59 @@
             </form>
         </div>
 
+        <!-- Управление списками слов -->
+        <div class="mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-purple-400">Списки слов для изучения</h3>
+                <button type="button" id="btn-create-word-list" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-5 py-2.5 rounded-lg transition-all">
+                    ＋ Создать список
+                </button>
+            </div>
+            
+            <div id="word-lists-container">
+                <p class="text-gray-400 text-sm">Загрузка...</p>
+            </div>
+            <script>
+                // Lightweight word lists loader (runs before main script)
+                (function(){
+                    try {
+                        fetch('{{ route("word-lists.index") }}', { headers: { 'Accept': 'application/json' } })
+                        .then(r => r.json())
+                        .then(data => {
+                            const container = document.getElementById('word-lists-container');
+                            if (!container) return;
+                            if (!data.lists || data.lists.length === 0) {
+                                container.innerHTML = '<p class="text-gray-400">Нет списков. Создайте первый список!</p>';
+                                return;
+                            }
+                            let html = '<div class="space-y-6">';
+                            data.lists.forEach(list => {
+                                html += `
+                                    <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+                                        <div class="flex items-center justify-between mb-4">
+                                            <div>
+                                                <h4 class="font-semibold text-white text-lg">${list.name}</h4>
+                                                <p class="text-gray-400 text-sm">${list.description || 'Без описания'}</p>
+                                                <p class="text-gray-500 text-xs mt-1">${list.word_count} слов</p>
+                                            </div>
+                                            <div class="flex gap-2 flex-shrink-0">
+                                                <a href="{{ route('kanji.word-quiz') }}?list_id=${list.id}" class="bg-purple-600 hover:bg-purple-500 px-3 py-2 rounded text-sm text-white">▶️ Квиз</a>
+                                            </div>
+                                        </div>
+                                    </div>`;
+                            });
+                            html += '</div>';
+                            container.innerHTML = html;
+                        })
+                        .catch(() => {
+                            const container = document.getElementById('word-lists-container');
+                            if (container) container.innerHTML = '<p class="text-red-400">Ошибка загрузки списков</p>';
+                        });
+                    } catch (e) { console.error(e); }
+                })();
+            </script>
+        </div>
+
         <div class="mb-6 bg-gray-800/50 rounded-xl p-6 border border-gray-700">
             <h3 class="text-xl font-bold text-purple-400 mb-4">Начать квиз по словам</h3>
             <form action="{{ route('kanji.word-quiz') }}" method="GET" class="flex flex-wrap items-center gap-4">
@@ -288,11 +404,15 @@
                                 </div>
                                 <div class="flex gap-1 flex-shrink-0">
                                     <button type="button" class="word-edit-btn text-blue-400 hover:text-blue-300 p-1 rounded" title="Редактировать" data-word-id="{{ $w['id'] }}">✏️</button>
+                                    @if($w['in_user_dictionary'])
                                     <form method="POST" action="{{ route('dictionary.remove', $w['id']) }}" class="inline word-remove-form" onsubmit="return confirm('Удалить слово из словаря?');">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="text-red-400 hover:text-red-300 p-1 rounded" title="Удалить">🗑️</button>
                                     </form>
+                                    @else
+                                    <button type="button" class="word-add-btn text-green-400 hover:text-green-300 p-1 rounded" title="Добавить" data-word-id="{{ $w['id'] }}">＋</button>
+                                    @endif
                                 </div>
                             </div>
                             <div class="text-gray-300 text-sm mb-3 line-clamp-2 flex-1">{{ $w['translation_ru'] }}</div>
@@ -312,17 +432,47 @@
     </div>
 
     <!-- Модальное окно: добавить слово -->
-    <div id="modal-add-word" class="fixed inset-0 bg-black/60 z-[9998] items-center justify-center p-4 hidden" style="display: none;">
-        <div class="bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full border border-gray-700">
-            <div class="p-6 border-b border-gray-700 flex justify-between items-center">
+    <div id="modal-add-word" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; padding: 1rem;" aria-hidden="true">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl w-full border border-gray-700 mx-4 max-h-[90vh] overflow-y-auto" style="max-width:680px;">
+            <div class="p-6 border-b border-gray-700 flex justify-between items-center sticky top-0 bg-gray-800 z-10">
                 <h3 class="text-xl font-bold text-purple-400">Добавить слово</h3>
                 <button type="button" id="modal-add-word-close" class="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
-            <div class="p-6">
-                <label class="block text-gray-300 mb-2">Слово на японском</label>
-                <input type="text" id="add-word-input" placeholder="私 или わたし" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white japanese-font focus:outline-none focus:ring-2 focus:ring-purple-500">
-                <p class="text-gray-500 text-sm mt-1">Будет выполнен поиск по словарю; при отсутствии — слово будет создано.</p>
-                <div class="mt-4 flex gap-3">
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-gray-300 mb-1">Японское слово *</label>
+                    <input type="text" id="add-japanese-word" placeholder="私 или わたし" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white japanese-font focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-gray-300 mb-1">Чтение</label>
+                    <input type="text" id="add-reading" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-gray-300 mb-1">Перевод (RU)</label>
+                    <input type="text" id="add-translation-ru" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-gray-300 mb-1">Перевод (EN)</label>
+                    <input type="text" id="add-translation-en" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-gray-300 mb-1">Тип слова</label>
+                    <select id="add-word-type" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="">— не указан —</option>
+                        @foreach($wordTypes ?? [] as $wt)
+                            <option value="{{ $wt }}">{{ $wt }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-300 mb-1">Пример (JP)</label>
+                    <input type="text" id="add-example-jp" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-gray-300 mb-1">Пример (RU)</label>
+                    <input type="text" id="add-example-ru" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div class="flex gap-3">
                     <button type="button" id="add-word-submit" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-5 py-2.5 rounded-lg transition">Добавить</button>
                     <button type="button" id="add-word-cancel" class="bg-gray-600 hover:bg-gray-500 text-white px-5 py-2.5 rounded-lg transition">Отмена</button>
                 </div>
@@ -332,8 +482,8 @@
     </div>
 
     <!-- Модальное окно: редактировать слово -->
-    <div id="modal-edit-word" class="fixed inset-0 bg-black/60 z-[9998] items-center justify-center p-4 hidden overflow-y-auto" style="display: none;">
-        <div class="bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full border border-gray-700 my-8">
+    <div id="modal-edit-word" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; padding: 1rem;" aria-hidden="true">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl w-full border border-gray-700 mx-4" style="max-width:680px;">
             <div class="p-6 border-b border-gray-700 flex justify-between items-center">
                 <h3 class="text-xl font-bold text-purple-400">Редактировать слово</h3>
                 <button type="button" id="modal-edit-word-close" class="text-gray-400 hover:text-white text-2xl">&times;</button>
@@ -506,6 +656,14 @@
                         @else
                             <div class="text-gray-300 text-sm leading-relaxed" id="modal-mnemonic"></div>
                         @endif
+                    </div>
+                    
+                    <!-- Добавить в список -->
+                    <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
+                        <div class="text-gray-400 text-sm mb-3">Добавить в список</div>
+                        <div id="kanji-lists-dropdown" class="space-y-2">
+                            <p class="text-gray-500 text-sm">Загрузка списков...</p>
+                        </div>
                     </div>
                     
                     <!-- Кнопки -->
@@ -822,6 +980,9 @@ window.openKanjiModal = function(kanjiItem) {
     modal.style.padding = '1rem';
     document.body.style.overflow = 'hidden';
     
+    // Загружаем списки для этого кандзи
+    loadKanjiListsInModal(currentKanji);
+    
     // Делаем модальное окно focusable и устанавливаем фокус для обработки Ctrl+V
     modal.setAttribute('tabindex', '-1');
     setTimeout(() => {
@@ -837,98 +998,158 @@ window.openKanjiModal = function(kanjiItem) {
     }, 100);
 };
 
+/**
+ * Открыть окно редактирования кандзи из личного списка
+ * Ищет элемент в глобальном списке или загружает данные с сервера
+ */
+window.openKanjiModalFromListItem = function(kanjiChar) {
+    // Сначала пытаемся найти элемент в глобальном списке
+    const existingElement = document.querySelector(`[data-kanji="${kanjiChar}"]`);
+    if (existingElement) {
+        openKanjiModal(existingElement);
+        return;
+    }
+    
+    // Если элемента нет в DOM, загружаем данные с сервера
+    fetch(`{{ route('kanji.get-kanji') }}?kanji=${encodeURIComponent(kanjiChar)}`, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        }
+    })
+    .then(async response => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.error || 'Ошибка загрузки данных кандзи');
+        }
+        return data;
+    })
+    .then(data => {
+        // Создаем элемент с загруженными данными
+        const tempElement = document.createElement('div');
+        tempElement.setAttribute('data-kanji', kanjiChar);
+        tempElement.setAttribute('data-translation', data.translation || '');
+        tempElement.setAttribute('data-reading', data.reading || '');
+        tempElement.setAttribute('data-level', data.level || '0');
+        tempElement.setAttribute('data-jlpt-level', data.jlpt_level || '');
+        tempElement.setAttribute('data-last-reviewed', data.last_reviewed_at || '');
+        tempElement.setAttribute('data-next-review', data.next_review_at || '');
+        tempElement.setAttribute('data-is-completed', data.is_completed ? '1' : '0');
+        tempElement.setAttribute('data-image-path', data.image_path || '');
+        tempElement.setAttribute('data-mnemonic', data.mnemonic || '');
+        tempElement.setAttribute('data-description', data.description || '');
+        
+        openKanjiModal(tempElement);
+    })
+    .catch(error => {
+        console.error('Ошибка загрузки кандзи:', error);
+        alert('Не удалось загрузить данные о кандзи');
+    });
+};
+
+
 // Поиск кандзи
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('kanji-search');
+    const searchResultsContainer = document.getElementById('kanji-search-results');
+    const searchResultsTbody = document.getElementById('kanji-search-results-tbody');
+    const clearBtn = document.getElementById('kanji-search-clear');
     const kanjiList = document.getElementById('kanji-list');
     
     if (searchInput) {
-        // Поиск при вводе (клиентская фильтрация в реальном времени)
+        // Поиск при вводе
         let searchTimeout;
         searchInput.addEventListener('input', function() {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(() => {
-                filterKanji(this.value.trim());
+                const searchTerm = this.value.trim();
+                
+                if (searchTerm === '') {
+                    // Если поле пусто, скрываем результаты поиска и показываем основной список
+                    searchResultsContainer.classList.add('hidden');
+                    if (kanjiList) kanjiList.style.display = '';
+                    clearBtn.classList.add('hidden');
+                } else {
+                    // Выполняем поиск
+                    performSearch(searchTerm);
+                    clearBtn.classList.remove('hidden');
+                }
             }, 200);
         });
     }
     
-    function filterKanji(searchTerm) {
+    function performSearch(searchTerm) {
         if (!kanjiList) return;
         
         const searchLower = searchTerm.toLowerCase();
         const kanjiItems = kanjiList.querySelectorAll('.kanji-item');
-        let visibleCount = 0;
+        const results = [];
         
+        // Собираем все совпадающие элементы
         kanjiItems.forEach(item => {
             const translation = (item.getAttribute('data-translation') || '').toLowerCase();
             const reading = (item.getAttribute('data-reading') || '').toLowerCase();
-            const kanji = (item.getAttribute('data-kanji') || '').toLowerCase();
+            const kanji = (item.getAttribute('data-kanji') || '');
             
-            const matches = !searchTerm || 
-                translation.includes(searchLower) || 
-                reading.includes(searchLower) ||
-                kanji.includes(searchLower);
+            const matches = translation.includes(searchLower) || 
+                           reading.includes(searchLower) ||
+                           kanji.toLowerCase().includes(searchLower);
             
             if (matches) {
-                item.style.display = '';
-                visibleCount++;
-            } else {
-                item.style.display = 'none';
+                results.push(item.cloneNode(true));
             }
         });
         
-        // Скрываем пустые строки
-        const rows = kanjiList.querySelectorAll('tr');
-        rows.forEach(row => {
-            const visibleItems = row.querySelectorAll('.kanji-item[style=""], .kanji-item:not([style*="display: none"])');
-            if (visibleItems.length === 0) {
-                row.style.display = 'none';
-            } else {
-                row.style.display = '';
-            }
-        });
+        // Скрываем основной список
+        kanjiList.style.display = 'none';
         
-        // Скрываем секции уровней, если в них нет видимых кандзи
-        const levelSections = kanjiList.querySelectorAll('.bg-gray-800\\/50');
-        levelSections.forEach(section => {
-            const visibleInSection = section.querySelectorAll('.kanji-item[style=""], .kanji-item:not([style*="display: none"])');
-            if (visibleInSection.length === 0 && searchTerm) {
-                section.style.display = 'none';
-            } else {
-                section.style.display = '';
+        // Отображаем результаты
+        if (results.length > 0) {
+            searchResultsTbody.innerHTML = '';
+            
+            // Группируем результаты по 10 в строке
+            const chunkSize = 10;
+            for (let i = 0; i < results.length; i += chunkSize) {
+                const chunk = results.slice(i, i + chunkSize);
+                const row = document.createElement('tr');
+                
+                chunk.forEach(item => {
+                    const td = document.createElement('td');
+                    td.className = 'bg-gray-700/50 border border-gray-600 hover:border-purple-500 transition-all hover:shadow-lg hover:shadow-purple-500/20 cursor-pointer text-center align-middle';
+                    td.style.cssText = 'width: 120px; height: 120px; padding: 1rem; vertical-align: middle; position: relative;';
+                    td.innerHTML = item.innerHTML;
+                    
+                    // Копируем все data атрибуты
+                    Array.from(item.attributes).forEach(attr => {
+                        if (attr.name.startsWith('data-')) {
+                            td.setAttribute(attr.name, attr.value);
+                        }
+                    });
+                    
+                    td.onclick = function() {
+                        openKanjiModalFromListItem(this.getAttribute('data-kanji'));
+                    };
+                    
+                    row.appendChild(td);
+                });
+                
+                // Добавляем пустые ячейки если строка не полная
+                for (let j = chunk.length; j < chunkSize; j++) {
+                    const emptyTd = document.createElement('td');
+                    emptyTd.style.cssText = 'width: 120px;';
+                    row.appendChild(emptyTd);
+                }
+                
+                searchResultsTbody.appendChild(row);
             }
-        });
-    }
-});
-
-document.addEventListener('DOMContentLoaded', function() {
-    // Закрытие модального окна
-    function closeModal() {
-        const modal = document.getElementById('kanji-modal');
-        if (modal) {
-            modal.style.display = 'none';
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
-            document.body.style.overflow = '';
+            
+            searchResultsContainer.classList.remove('hidden');
+        } else {
+            searchResultsTbody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-400 py-4">Кандзи не найдено</td></tr>';
+            searchResultsContainer.classList.remove('hidden');
         }
     }
-    
-    const closeModalBtn = document.getElementById('close-modal');
-    if (closeModalBtn) {
-        closeModalBtn.addEventListener('click', closeModal);
-    }
-    
-    const modal = document.getElementById('kanji-modal');
-    if (modal) {
-        // Закрываем при клике на фон
-        modal.addEventListener('click', function(e) {
-            if (e.target === modal) {
-                closeModal();
-            }
-        });
-    }
-    
+
     // Кнопка добавления изображения (для админа)
     const addImageBtn = document.getElementById('add-image-btn');
     if (addImageBtn) {
@@ -1433,43 +1654,67 @@ document.addEventListener('DOMContentLoaded', function() {
     const modalAddWord = document.getElementById('modal-add-word');
     const modalEditWord = document.getElementById('modal-edit-word');
     if (modalAddWord) {
-        document.getElementById('btn-add-word')?.addEventListener('click', function() {
-            modalAddWord.classList.remove('hidden');
+        function openAddWordModal() {
             modalAddWord.style.display = 'flex';
-            document.getElementById('add-word-input').value = '';
+            modalAddWord.setAttribute('tabindex', '-1');
+            document.body.style.overflow = 'hidden';
+            setTimeout(() => { modalAddWord.focus(); }, 100);
+        }
+        function closeAddWordModal() {
+            modalAddWord.style.display = 'none';
+            document.body.style.overflow = '';
+        }
+
+        document.getElementById('btn-add-word')?.addEventListener('click', function() {
+            document.getElementById('add-japanese-word').value = '';
+            document.getElementById('add-reading').value = '';
+            document.getElementById('add-translation-ru').value = '';
+            document.getElementById('add-translation-en').value = '';
+            document.getElementById('add-word-type').value = '';
+            document.getElementById('add-example-jp').value = '';
+            document.getElementById('add-example-ru').value = '';
             document.getElementById('add-word-message').classList.add('hidden');
+            openAddWordModal();
         });
         document.getElementById('modal-add-word-close')?.addEventListener('click', function() {
-            modalAddWord.classList.add('hidden');
-            modalAddWord.style.display = 'none';
+            closeAddWordModal();
         });
         document.getElementById('add-word-cancel')?.addEventListener('click', function() {
-            modalAddWord.classList.add('hidden');
-            modalAddWord.style.display = 'none';
+            closeAddWordModal();
         });
+        // Backdrop clicks should not close the modal; close only via explicit controls
         document.getElementById('add-word-submit')?.addEventListener('click', function() {
-            const input = document.getElementById('add-word-input');
-            const japaneseWord = (input?.value || '').trim();
+            const japaneseWord = (document.getElementById('add-japanese-word')?.value || '').trim();
             if (!japaneseWord) {
-                document.getElementById('add-word-message').textContent = 'Введите слово.';
+                document.getElementById('add-word-message').textContent = 'Введите японское слово.';
                 document.getElementById('add-word-message').classList.remove('hidden');
                 return;
             }
             this.disabled = true;
             const msgEl = document.getElementById('add-word-message');
+            const payload = {
+                japanese_word: japaneseWord,
+                reading: document.getElementById('add-reading')?.value || '',
+                translation_ru: document.getElementById('add-translation-ru')?.value || '',
+                translation_en: document.getElementById('add-translation-en')?.value || '',
+                word_type: document.getElementById('add-word-type')?.value || '',
+                example_jp: document.getElementById('add-example-jp')?.value || '',
+                example_ru: document.getElementById('add-example-ru')?.value || '',
+                _token: document.querySelector('meta[name="csrf-token"]').content
+            };
+
             fetch('{{ route("dictionary.add") }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'X-CSRF-TOKEN': payload._token,
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify({ japanese_word: japaneseWord })
+                body: JSON.stringify(payload)
             })
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    modalAddWord.classList.add('hidden');
                     modalAddWord.style.display = 'none';
                     window.location.reload();
                 } else {
@@ -1483,16 +1728,54 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .finally(() => { this.disabled = false; });
         });
+
+        // Быстро добавить уже существующее глобальное слово в личный словарь
+        document.querySelectorAll('.word-add-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const wordId = this.getAttribute('data-word-id');
+                if (!wordId) return;
+                this.disabled = true;
+                fetch('{{ route("dictionary.add") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ word_id: wordId })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.reload();
+                    } else {
+                        alert(data.error || 'Не удалось добавить слово');
+                    }
+                })
+                .catch(() => alert('Ошибка сети'))
+                .finally(() => { this.disabled = false; });
+            });
+        });
     }
     if (modalEditWord) {
-        document.getElementById('modal-edit-word-close')?.addEventListener('click', function() {
-            modalEditWord.classList.add('hidden');
+        function openEditWordModal() {
+            modalEditWord.style.display = 'flex';
+            modalEditWord.setAttribute('tabindex', '-1');
+            document.body.style.overflow = 'hidden';
+            setTimeout(() => { modalEditWord.focus(); }, 100);
+        }
+        function closeEditWordModal() {
             modalEditWord.style.display = 'none';
+            document.body.style.overflow = '';
+        }
+
+        document.getElementById('modal-edit-word-close')?.addEventListener('click', function() {
+            closeEditWordModal();
         });
         document.getElementById('edit-word-cancel')?.addEventListener('click', function() {
-            modalEditWord.classList.add('hidden');
-            modalEditWord.style.display = 'none';
+            closeEditWordModal();
         });
+        // Backdrop clicks should not close the modal; close only via explicit controls
         document.querySelectorAll('.word-edit-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 const wordId = this.getAttribute('data-word-id');
@@ -1510,8 +1793,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('edit-example-jp').value = data.example_jp || '';
                     document.getElementById('edit-example-ru').value = data.example_ru || '';
                     document.getElementById('edit-word-message').classList.add('hidden');
-                    modalEditWord.classList.remove('hidden');
-                    modalEditWord.style.display = 'flex';
+                    openEditWordModal();
                 })
                 .catch(() => alert('Не удалось загрузить слово'));
             });
@@ -1564,6 +1846,1264 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// ========== Управление списками кандзи ==========
+document.addEventListener('DOMContentLoaded', function() {
+    loadKanjiLists();
+    loadWordLists();
+    
+    // Обработчик кнопки создания списка кандзи
+    document.getElementById('btn-create-list')?.addEventListener('click', function() {
+        openCreateListModal();
+    });
+    
+    // Обработчик кнопки создания списка слов
+    document.getElementById('btn-create-word-list')?.addEventListener('click', function() {
+        openCreateWordListModal();
+    });
+});
+
+function loadKanjiLists() {
+    fetch('{{ route("kanji-lists.index") }}', {
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        const container = document.getElementById('kanji-lists-container');
+        const select = document.getElementById('quiz-list-select');
+        
+        if (!data.lists || data.lists.length === 0) {
+            container.innerHTML = '<p class="text-gray-400">Нет списков. Создайте первый список!</p>';
+            return;
+        }
+        
+        // Очищаем select от старых опций (кроме первой "Все кандзи")
+        while (select.children.length > 1) {
+            select.removeChild(select.children[1]);
+        }
+        
+        let html = '<div class="space-y-6">';
+        data.lists.forEach(list => {
+            html += `
+                <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h4 class="font-semibold text-white text-lg">${list.name}</h4>
+                            <p class="text-gray-400 text-sm">${list.description || 'Без описания'}</p>
+                            <p class="text-gray-500 text-xs mt-1">${list.kanji_count} кандзи</p>
+                            <div style="width:220px; height:8px; background-color: rgba(75,85,99,0.35); border-radius:9999px; overflow:hidden; margin-top:8px;">
+                                <div style="height:100%; width: ${list.progress_percent || 0}%; background: linear-gradient(90deg, #a855f7 0%, #6366f1 100%); border-radius:9999px; transition: width 0.3s ease; box-shadow: 0 0 6px rgba(168,85,247,0.35);"></div>
+                            </div>
+                            <p class="text-gray-400 text-xs mt-1">Прогресс: ${list.progress_percent || 0}% — ${list.completed_count || 0} завершено</p>
+                            <p class="text-gray-400 text-xs mt-1">📚 Повторений: ${list.repetitions_completed || 0}</p>
+                        </div>
+                        <div class="flex gap-2 flex-shrink-0">
+                            <button onclick="openEditListModal(${list.id})" class="bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded text-sm text-white">✏️</button>
+                            <button onclick="deleteList(${list.id})" class="bg-red-600 hover:bg-red-500 px-3 py-2 rounded text-sm text-white">🗑️</button>
+                            <a href="{{ route('kanji.quiz') }}?list_id=${list.id}${list.progress_percent === 100 ? '&count=' + list.kanji_count : ''}" class="bg-purple-600 hover:bg-purple-500 px-3 py-2 rounded text-sm text-white">▶️ Квиз</a>
+                        </div>
+                    </div>
+            `;
+            
+            // Добавляем таблицу с кандзи
+            if (list.kanji_in_list && list.kanji_in_list.length > 0) {
+                html += `<div class="overflow-x-auto">
+                    <table class="w-full border-collapse">
+                        <tbody>
+                `;
+                
+                // Группируем кандзи по 10 в строке
+                const chunkSize = 10;
+                const kanjiProgresses = list.kanji_with_progress || [];
+                
+                for (let i = 0; i < list.kanji_in_list.length; i += chunkSize) {
+                    const chunk = list.kanji_in_list.slice(i, i + chunkSize);
+                    html += '<tr>';
+                    chunk.forEach(kanji => {
+                        const kanjiProgress = kanjiProgresses.find(k => k.kanji === kanji);
+                        const progressPercent = kanjiProgress ? kanjiProgress.progress_percent : 0;
+                        
+                        html += `
+                            <td class="bg-gray-700/50 border border-gray-600 hover:border-purple-500 transition-all cursor-pointer text-center align-middle" 
+                                style="width: 120px; height: 120px; padding: 1rem; vertical-align: middle; position: relative;"
+                                onclick="event.stopPropagation(); openKanjiModalFromListItem('${kanji}');">
+                                <div style="display: flex; flex-direction: column; height: 100%; justify-content: space-between; align-items: center;">
+                                    <div class="text-6xl font-bold text-white" style="font-family: 'Noto Sans JP', sans-serif; line-height: 1.2; display: flex; align-items: center; justify-content: center; flex: 1;">${kanji}</div>
+                                    <div style="width: 90%; height: 6px; background-color: rgba(75, 85, 99, 0.5); border-radius: 9999px; overflow: hidden; position: relative; margin-top: 0.5rem;">
+                                        <div style="height: 100%; width: ${progressPercent}%; background: linear-gradient(90deg, #a855f7 0%, #6366f1 100%); border-radius: 9999px; transition: width 0.3s ease; box-shadow: 0 0 4px rgba(168, 85, 247, 0.4);"></div>
+                                    </div>
+                                </div>
+                            </td>
+                        `;
+                    });
+                    // Добавляем пустые ячейки если строка не полная
+                    for (let j = chunk.length; j < chunkSize; j++) {
+                        html += '<td style="width: 120px;"></td>';
+                    }
+                    html += '</tr>';
+                }
+                
+                html += `
+                        </tbody>
+                    </table>
+                </div>`;
+            } else {
+                html += '<p class="text-gray-500 text-sm">В списке нет кандзи</p>';
+            }
+            
+            html += '</div>';
+            
+            // Добавляем опцию в select
+            const option = document.createElement('option');
+            option.value = list.id;
+            option.textContent = `${list.name} (${list.kanji_count})`;
+            select.appendChild(option);
+        });
+        html += '</div>';
+        container.innerHTML = html;
+    })
+    .catch(err => {
+        document.getElementById('kanji-lists-container').innerHTML = '<p class="text-red-400">Ошибка загрузки списков</p>';
+        console.error(err);
+    });
+}
+
+function openCreateListModal() {
+    const modalHtml = `
+        <div id="modal-create-list" style="position: fixed; inset: 0; display: flex; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.5); z-index: 50;" class="modal-backdrop">
+            <div style="background: #2d3748; border-radius: 12px; padding: 2rem; width: 90%; max-width: 500px; border: 1px solid #4b5563;" class="modal-content">
+                <h2 class="text-2xl font-bold text-purple-400 mb-4">Создать новый список</h2>
+                <input type="text" id="list-name" placeholder="Название списка" 
+                       class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 mb-3">
+                <textarea id="list-description" placeholder="Описание (опционально)" 
+                          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 mb-4 h-20"></textarea>
+                <div class="flex gap-2 justify-end">
+                    <button onclick="closeCreateListModal()" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-white">Отмена</button>
+                    <button onclick="saveNewList()" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded text-white">Создать</button>
+                </div>
+                <p id="list-create-error" class="text-red-400 text-sm mt-3 hidden"></p>
+            </div>
+        </div>
+    `;
+    
+    const existing = document.getElementById('modal-create-list');
+    if (existing) existing.remove();
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    // Backdrop clicks should not close the modal; close only via explicit controls
+}
+
+function closeCreateListModal() {
+    document.getElementById('modal-create-list')?.remove();
+}
+
+function saveNewList() {
+    const name = document.getElementById('list-name').value.trim();
+    const description = document.getElementById('list-description').value.trim();
+    
+    if (!name) {
+        document.getElementById('list-create-error').textContent = 'Название не может быть пустым';
+        document.getElementById('list-create-error').classList.remove('hidden');
+        return;
+    }
+    
+    fetch('{{ route("kanji-lists.store") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ name, description })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            closeCreateListModal();
+            loadKanjiLists();
+        } else {
+            document.getElementById('list-create-error').textContent = data.message || 'Ошибка создания';
+            document.getElementById('list-create-error').classList.remove('hidden');
+        }
+    })
+    .catch(err => {
+        document.getElementById('list-create-error').textContent = 'Ошибка сети';
+        document.getElementById('list-create-error').classList.remove('hidden');
+        console.error(err);
+    });
+}
+
+function openEditListModal(listId) {
+    // Загружаем все списки для поиска нужного списка
+    fetch('{{ route("kanji-lists.index") }}', {
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        const currentList = data.lists.find(l => l.id === listId);
+        if (!currentList) {
+            alert('Список не найден');
+            return;
+        }
+        
+        // Загружаем все кандзи из таблицы для выбора
+        const allKanjis = Array.from(document.querySelectorAll('[data-kanji]')).map(el => ({
+            kanji: el.dataset.kanji,
+            translation: el.dataset.translation,
+            reading: el.dataset.reading
+        }));
+        
+        displayEditListModal(listId, currentList, allKanjis);
+    })
+    .catch(err => {
+        alert('Ошибка загрузки данных списка');
+        console.error(err);
+    });
+}
+
+function displayEditListModal(listId, currentList, allKanjis) {
+    const currentKanjisSet = new Set(currentList.kanji_in_list || []);
+    
+    // Создаем HTML модального окна
+    const modalHtml = `
+        <div id="modal-edit-list-${listId}" style="position: fixed; inset: 0; display: flex; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.5); z-index: 50; overflow-y: auto;" class="modal-backdrop">
+            <div style="background: #2d3748; border-radius: 12px; padding: 2rem; width: 90%; max-width: 700px; border: 1px solid #4b5563; margin: 2rem auto;" class="modal-content">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h2 class="text-2xl font-bold text-purple-400">Редактировать список</h2>
+                    <button onclick="closeEditListModal(${listId})" style="background: none; border: none; color: #9ca3af; font-size: 1.5rem; cursor: pointer; hover: color: #fff;">×</button>
+                </div>
+                
+                <div style="max-height: 600px; overflow-y: auto;">
+                    <!-- Информация о списке -->
+                    <div style="margin-bottom: 1.5rem;">
+                        <label class="text-white text-sm block mb-2">Название списка</label>
+                        <input type="text" id="edit-list-name-${listId}" placeholder="Название списка" 
+                               value="${escapeHtml(currentList.name)}"
+                               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 mb-3">
+                        
+                        <label class="text-white text-sm block mb-2">Описание</label>
+                        <textarea id="edit-list-description-${listId}" placeholder="Описание (опционально)" 
+                                  class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 h-20">${escapeHtml(currentList.description || '')}</textarea>
+                    </div>
+                    
+                    <!-- Вставка списка кандзи через запятую -->
+                    <div style="margin-bottom: 1.5rem; background: #1f2937; border-left: 4px solid #8b5cf6; padding: 1rem; border-radius: 6px;">
+                        <label class="text-white text-sm block mb-2">📋 Вставить кандзи из списка</label>
+                        <p class="text-gray-400 text-xs mb-2">Вставьте кандзи через запятую (например: 去, 物, 代)</p>
+                        <textarea id="kanji-bulk-input-${listId}" placeholder="Вставьте кандзи через запятую..." 
+                                  class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 h-20 font-mono"
+                                  style="font-family: 'Noto Sans JP', monospace;"></textarea>
+                        <div style="margin-top: 0.5rem;">
+                            <button type="button" onclick="addKanjisFromBulkInput(${listId})" 
+                                    style="background: #8b5cf6; border: none; color: white; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.875rem; transition: all 0.2s;"
+                                    onmouseover="this.style.background='#7c3aed'"
+                                    onmouseout="this.style.background='#8b5cf6'">
+                                ↓ Добавить
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Поиск кандзи для добавления -->
+                    <div style="margin-bottom: 1.5rem;">
+                        <label class="text-white text-sm block mb-2">🔍 Или найти и добавить по одному</label>
+                        <input type="text" id="kanji-search-input-${listId}" placeholder="Поиск по кандзи, переводу или чтению..." 
+                               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 mb-2"
+                               oninput="filterAddKanjis(${listId}, '${currentList.name}')">
+                        <div id="kanji-search-results-${listId}" class="bg-gray-700/50 rounded-lg p-3 max-h-40 overflow-y-auto">
+                            <p class="text-gray-400 text-sm">Начните вводить для поиска...</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Текущие кандзи в списке -->
+                    <div style="margin-bottom: 1.5rem;">
+                        <label class="text-white text-sm block mb-2">✏️ Кандзи в списке (${currentList.kanji_count})</label>
+                        <div id="current-kanjis-${listId}" class="bg-gray-700/50 rounded-lg p-4 border border-gray-600" style="min-height: 100px;">
+                            ${renderCurrentKanjis(listId, currentList)}
+                        </div>
+                    </div>
+                </div>
+                
+                <p id="list-edit-error-${listId}" class="text-red-400 text-sm mb-3 hidden"></p>
+                
+                <!-- Кнопки -->
+                <div class="flex gap-2 justify-end">
+                    <button onclick="closeEditListModal(${listId})" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-white font-medium transition">Отмена</button>
+                    <button onclick="saveEditedList(${listId})" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded text-white font-medium transition">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Удаляем старое модальное окно если оно есть
+    const existing = document.getElementById(`modal-edit-list-${listId}`);
+    if (existing) existing.remove();
+    
+    // Вставляем новое модальное окно
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Обработка закрытия при клике на фон
+    const modal = document.getElementById(`modal-edit-list-${listId}`);
+    // Backdrop clicks should not close the modal; close only via explicit controls (close button)
+}
+
+function renderCurrentKanjis(listId, currentList) {
+    if (!currentList.kanji_in_list || currentList.kanji_in_list.length === 0) {
+        return '<p class="text-gray-400 text-sm">В списке нет кандзи</p>';
+    }
+    
+    const chunkSize = 10;
+    let html = '<div style="display: inline-block; width: 100%;">';
+    
+    for (let i = 0; i < currentList.kanji_in_list.length; i += chunkSize) {
+        html += '<div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;">';
+        
+        const chunk = currentList.kanji_in_list.slice(i, i + chunkSize);
+        chunk.forEach(kanji => {
+            html += `
+                <div style="background: #4b5563; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #6b7280; display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="font-size: 1.25rem; font-family: 'Noto Sans JP', sans-serif;">${kanji}</span>
+                    <button type="button" onclick="removeKanjiFromListEdit(${listId}, '${kanji}')" 
+                            style="background: #dc2626; border: none; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.875rem;">
+                        ✕
+                    </button>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+    }
+    
+    html += '</div>';
+    return html;
+}
+
+function filterAddKanjis(listId, listName) {
+    const searchInput = document.getElementById(`kanji-search-input-${listId}`);
+    const query = searchInput.value.trim().toLowerCase();
+    const resultsContainer = document.getElementById(`kanji-search-results-${listId}`);
+    
+    if (!query) {
+        resultsContainer.innerHTML = '<p class="text-gray-400 text-sm">Начните вводить для поиска...</p>';
+        return;
+    }
+    
+    // Получаем все кандзи из таблицы (вне модального окна для избежания дублей)
+    const allKanjisMap = new Map();
+    document.querySelectorAll('[data-kanji]').forEach(el => {
+        // Только берем из основной таблицы кандзи, не из модального окна
+        if (!el.closest(`#modal-edit-list-${listId}`)) {
+            const kanji = el.dataset.kanji;
+            if (!allKanjisMap.has(kanji)) {
+                allKanjisMap.set(kanji, {
+                    kanji: kanji,
+                    translation: el.dataset.translation,
+                    reading: el.dataset.reading
+                });
+            }
+        }
+    });
+    
+    // Получаем текущий список кандзи
+    const currentKanjisSet = new Set(
+        Array.from(document.querySelectorAll(`#current-kanjis-${listId} span[style*="font-size"]`))
+            .map(el => el.textContent.trim())
+    );
+    
+    // Фильтруем и показываем только те, которых еще нет в списке
+    const filtered = Array.from(allKanjisMap.values()).filter(item => {
+        if (currentKanjisSet.has(item.kanji)) return false; // Уже в списке
+        
+        const translationMatch = item.translation?.toLowerCase().includes(query);
+        const readingMatch = item.reading?.toLowerCase().includes(query);
+        const kanjiMatch = item.kanji === query;
+        
+        return translationMatch || readingMatch || kanjiMatch;
+    });
+    
+    if (filtered.length === 0) {
+        resultsContainer.innerHTML = '<p class="text-gray-400 text-sm">Нет результатов</p>';
+        return;
+    }
+    
+    let html = '<div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">';
+    filtered.slice(0, 20).forEach(item => {
+        html += `
+            <button type="button" 
+                    onclick="addKanjiToListEdit(${listId}, '${item.kanji}')"
+                    style="background: #6366f1; border: none; color: white; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: 'Noto Sans JP', sans-serif; font-size: 1rem; font-weight: bold;"
+                    onmouseover="this.style.background='#4f46e5'"
+                    onmouseout="this.style.background='#6366f1'">
+                ${item.kanji}
+            </button>
+        `;
+    });
+    html += '</div>';
+    
+    resultsContainer.innerHTML = html;
+}
+
+function addKanjisFromBulkInput(listId) {
+    const input = document.getElementById(`kanji-bulk-input-${listId}`).value.trim();
+    
+    if (!input) {
+        alert('Пожалуйста, вставьте кандзи');
+        return;
+    }
+    
+    // Получаем все валидные кандзи из основной таблицы
+    const validKanjisMap = new Map();
+    document.querySelectorAll('[data-kanji]').forEach(el => {
+        if (!el.closest(`#modal-edit-list-${listId}`)) {
+            const kanji = el.dataset.kanji;
+            if (!validKanjisMap.has(kanji)) {
+                validKanjisMap.set(kanji, true);
+            }
+        }
+    });
+    
+    // Парсим введенный текст - разделяем по запятым, пробелам и другим разделителям
+    const kanjiChars = input
+        .split(/[\s,，、]+/) // Разделяем по пробелам, запятым (обе версии) и другим разделителям
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+    
+    // Получаем текущий список кандзи в модальном окне
+    const currentKanjisSet = new Set(
+        Array.from(document.querySelectorAll(`#current-kanjis-${listId} span[style*="font-size"]`))
+            .map(el => el.textContent.trim())
+    );
+    
+    let addedCount = 0;
+    let notFoundCount = 0;
+    const notFound = [];
+    
+    kanjiChars.forEach(kanji => {
+        if (currentKanjisSet.has(kanji)) {
+            // Уже в списке, пропускаем
+            return;
+        }
+        
+        if (!validKanjisMap.has(kanji)) {
+            // Кандзи не найдено в базе
+            notFound.push(kanji);
+            notFoundCount++;
+            return;
+        }
+        
+        // Добавляем кандзи
+        addKanjiToListEdit(listId, kanji);
+        addedCount++;
+    });
+    
+    // Очищаем поле ввода
+    document.getElementById(`kanji-bulk-input-${listId}`).value = '';
+    
+    // Показываем результат
+    let message = `✓ Добавлено: ${addedCount}`;
+    if (notFoundCount > 0) {
+        message += `. ⚠️ Не найденные: ${notFound.slice(0, 5).join(', ')}${notFoundCount > 5 ? '...' : ''}`;
+    }
+    alert(message);
+}
+
+function addKanjiToListEdit(listId, kanji) {
+    const currentKanjisContainer = document.getElementById(`current-kanjis-${listId}`);
+    
+    // Проверяем что кандзи еще не в списке
+    const exists = Array.from(currentKanjisContainer.querySelectorAll('span[style*="font-size"]'))
+        .some(el => el.textContent.trim() === kanji);
+    
+    if (exists) {
+        return; // Уже в списке, пропускаем
+    }
+    
+    // Если контейнер пуст или содержит сообщение "В списке нет", очищаем его
+    if (currentKanjisContainer.textContent.includes('В списке нет')) {
+        currentKanjisContainer.innerHTML = '';
+    }
+    
+    // Проверяем нужно ли создавать новую строку
+    let currentRow = currentKanjisContainer.querySelector('div[style*="display: flex"][style*="flex-wrap"]');
+    
+    if (!currentRow || currentRow.querySelectorAll('div').length >= 10) {
+        // Создаем новую строку если текущей нет или она полная
+        currentRow = document.createElement('div');
+        currentRow.style.cssText = 'display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;';
+        currentKanjisContainer.appendChild(currentRow);
+    }
+    
+    // Добавляем новое кандзи в UI
+    const kanjiEl = document.createElement('div');
+    kanjiEl.style.cssText = 'background: #4b5563; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #6b7280; display: inline-flex; align-items: center; gap: 0.5rem;';
+    kanjiEl.innerHTML = `
+        <span style="font-size: 1.25rem; font-family: 'Noto Sans JP', sans-serif;">${kanji}</span>
+        <button type="button" onclick="this.parentElement.remove(); updateEditListUI(${listId});" 
+                style="background: #dc2626; border: none; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.875rem;">
+            ✕
+        </button>
+    `;
+    
+    currentRow.appendChild(kanjiEl);
+    updateEditListUI(listId);
+}
+
+function removeKanjiFromListEdit(listId, kanji) {
+    // Находим и удаляем кандзи
+    const container = document.getElementById(`current-kanjis-${listId}`);
+    const kanjiElements = container.querySelectorAll('span[style*="font-size"]');
+    
+    kanjiElements.forEach(el => {
+        if (el.textContent.trim() === kanji) {
+            el.parentElement.remove();
+        }
+    });
+    
+    updateEditListUI(listId);
+}
+
+function updateEditListUI(listId) {
+    // Обновляем счетчик кандзи
+    const container = document.getElementById(`current-kanjis-${listId}`);
+    const kanjiCount = container.querySelectorAll('span[style*="font-size"]').length;
+    
+    // Обновляем label
+    const label = Array.from(document.querySelectorAll('label')).find(l => l.textContent.includes('Кандзи в списке'));
+    if (label) {
+        label.textContent = `Кандзи в списке (${kanjiCount})`;
+    }
+}
+
+function closeEditListModal(listId) {
+    document.getElementById(`modal-edit-list-${listId}`)?.remove();
+}
+
+function saveEditedList(listId) {
+    const name = document.getElementById(`edit-list-name-${listId}`).value.trim();
+    const description = document.getElementById(`edit-list-description-${listId}`).value.trim();
+    
+    if (!name) {
+        document.getElementById(`list-edit-error-${listId}`).textContent = 'Название не может быть пустым';
+        document.getElementById(`list-edit-error-${listId}`).classList.remove('hidden');
+        return;
+    }
+    
+    // Получаем список кандзи из UI
+    const container = document.getElementById(`current-kanjis-${listId}`);
+    const kanjis = Array.from(container.querySelectorAll('span[style*="font-size"]'))
+        .map(el => el.textContent.trim());
+    
+    // Сохраняем список на сервер
+    fetch(`/kanji-lists/${listId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ name, description })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // Теперь обновляем кандзи в списке
+            // Сначала получаем текущий список кандзи
+            fetch(`/kanji-lists/${listId}/kanjis`, {
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(r => r.json())
+            .then(data => {
+                const currentKanjis = new Set(data.kanjis || []);
+                const newKanjis = new Set(kanjis);
+                
+                // Удаляем кандзи которых больше нет
+                const toRemove = Array.from(currentKanjis).filter(k => !newKanjis.has(k));
+                // Добавляем новые кандзи
+                const toAdd = Array.from(newKanjis).filter(k => !currentKanjis.has(k));
+                
+                let removed = 0;
+                let added = 0;
+                let errorOccurred = false;
+                
+                // Удаляем кандзи
+                const removePromises = toRemove.map(kanji => 
+                    fetch(`/kanji-lists/${listId}/toggle-kanji`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ kanji })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) removed++;
+                    })
+                    .catch(err => errorOccurred = true)
+                );
+                
+                // Добавляем кандзи
+                const addPromises = toAdd.map(kanji => 
+                    fetch(`/kanji-lists/${listId}/toggle-kanji`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ kanji })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) added++;
+                    })
+                    .catch(err => errorOccurred = true)
+                );
+                
+                Promise.all([...removePromises, ...addPromises]).then(() => {
+                    if (errorOccurred) {
+                        alert('Некоторые изменения не были сохранены');
+                    }
+                    closeEditListModal(listId);
+                    loadKanjiLists();
+                });
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Ошибка обновления кандзи');
+            });
+        } else {
+            document.getElementById(`list-edit-error-${listId}`).textContent = data.message || 'Ошибка сохранения';
+            document.getElementById(`list-edit-error-${listId}`).classList.remove('hidden');
+        }
+    })
+    .catch(err => {
+        document.getElementById(`list-edit-error-${listId}`).textContent = 'Ошибка сети';
+        document.getElementById(`list-edit-error-${listId}`).classList.remove('hidden');
+        console.error(err);
+    });
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+function deleteList(listId) {
+    if (!confirm('Вы уверены? Список будет удален без возможности восстановления.')) return;
+    
+    fetch(`/kanji-lists/${listId}`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            'Accept': 'application/json'
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            loadKanjiLists();
+        } else {
+            alert(data.message || 'Ошибка удаления');
+        }
+    })
+    .catch(err => {
+        alert('Ошибка сети при удалении');
+        console.error(err);
+    });
+}
+
+// Функция для загрузки и отображения списков в модальном окне кандзи
+function loadKanjiListsInModal(currentKanji) {
+    const container = document.getElementById('kanji-lists-dropdown');
+    if (!container) return;
+    
+    fetch('{{ route("kanji-lists.index") }}', {
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.lists || data.lists.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 text-sm">Нет списков. Создайте список на странице управления.</p>';
+            return;
+        }
+        
+        let html = '';
+        data.lists.forEach(list => {
+            const isInList = list.kanji_in_list && list.kanji_in_list.includes(currentKanji);
+            html += `
+                <button type="button" onclick="toggleKanjiInList('${currentKanji}', ${list.id}, this)" 
+                        class="w-full text-left px-3 py-2 rounded transition ${isInList ? 'bg-purple-600/70 text-white' : 'bg-gray-600/50 text-gray-300 hover:bg-gray-600'} border border-gray-600/50">
+                    ${isInList ? '✓ ' : '○ '} ${list.name}
+                </button>
+            `;
+        });
+        container.innerHTML = html;
+    })
+    .catch(err => {
+        container.innerHTML = '<p class="text-red-400 text-sm">Ошибка загрузки списков</p>';
+        console.error(err);
+    });
+}
+
+// Переключение кандзи в списке
+function toggleKanjiInList(kanji, listId, buttonEl) {
+    fetch(`/kanji-lists/${listId}/toggle-kanji`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ kanji })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            if (data.added) {
+                buttonEl.classList.remove('bg-gray-600/50', 'text-gray-300', 'hover:bg-gray-600');
+                buttonEl.classList.add('bg-purple-600/70', 'text-white');
+                buttonEl.textContent = '✓ ' + buttonEl.textContent.substring(2);
+            } else {
+                buttonEl.classList.add('bg-gray-600/50', 'text-gray-300', 'hover:bg-gray-600');
+                buttonEl.classList.remove('bg-purple-600/70', 'text-white');
+                buttonEl.textContent = '○ ' + buttonEl.textContent.substring(2);
+            }
+            // Обновляем списки на странице
+            loadKanjiLists();
+        } else {
+            alert(data.message || 'Ошибка при добавлении в список');
+        }
+    })
+    .catch(err => {
+        alert('Ошибка сети');
+        console.error(err);
+    });
+}
+
+// ========== Управление списками слов ==========
+function loadWordLists() {
+    console.log('Loading word lists...');
+    fetch('{{ route("word-lists.index") }}', {
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(r => {
+        console.log('Response status:', r.status);
+        return r.json();
+    })
+    .then(data => {
+        console.log('Word lists data:', data);
+        const container = document.getElementById('word-lists-container');
+        
+        if (!data.lists || data.lists.length === 0) {
+            container.innerHTML = '<p class="text-gray-400">Нет списков. Создайте первый список!</p>';
+            return;
+        }
+        
+        let html = '<div class="space-y-6">';
+        data.lists.forEach(list => {
+            html += `
+                <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h4 class="font-semibold text-white text-lg">${escapeWordHtml(list.name)}</h4>
+                            <p class="text-gray-400 text-sm">${escapeWordHtml(list.description || 'Без описания')}</p>
+                            <p class="text-gray-500 text-xs mt-1">${list.word_count} слов</p>
+                            <div style="width:220px; height:8px; background-color: rgba(75,85,99,0.35); border-radius:9999px; overflow:hidden; margin-top:8px;">
+                                <div style="height:100%; width: ${list.progress_percent || 0}%; background: linear-gradient(90deg, #a855f7 0%, #6366f1 100%); border-radius:9999px; transition: width 0.3s ease; box-shadow: 0 0 6px rgba(168,85,247,0.35);"></div>
+                            </div>
+                            <p class="text-gray-400 text-xs mt-1">Прогресс: ${list.progress_percent || 0}% — ${list.completed_count || 0} завершено</p>
+                            <p class="text-gray-400 text-xs mt-1">📚 Повторений: ${list.repetitions_completed || 0}</p>
+                        </div>
+                        <div class="flex gap-2 flex-shrink-0">
+                            <button onclick="openEditWordListModal(${list.id})" class="bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded text-sm text-white">✏️</button>
+                            <button onclick="deleteWordList(${list.id})" class="bg-red-600 hover:bg-red-500 px-3 py-2 rounded text-sm text-white">🗑️</button>
+                            <a href="{{ route('kanji.word-quiz') }}?list_id=${list.id}${list.progress_percent === 100 ? '&count=' + list.word_count : ''}" class="bg-purple-600 hover:bg-purple-500 px-3 py-2 rounded text-sm text-white">▶️ Квиз</a>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        container.innerHTML = html;
+    })
+    .catch(err => {
+        console.error('Error loading word lists:', err);
+        document.getElementById('word-lists-container').innerHTML = '<p class="text-red-400">Ошибка загрузки списков</p>';
+    });
+}
+
+function openCreateWordListModal() {
+    const modalHtml = `
+        <div id="modal-create-word-list" style="position: fixed; inset: 0; display: flex; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.5); z-index: 50;" class="modal-backdrop">
+            <div style="background: #2d3748; border-radius: 12px; padding: 2rem; width: 90%; max-width: 500px; border: 1px solid #4b5563;" class="modal-content">
+                <h2 class="text-2xl font-bold text-purple-400 mb-4">Создать новый список слов</h2>
+                <input type="text" id="word-list-name" placeholder="Название списка" 
+                       class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 mb-3">
+                <textarea id="word-list-description" placeholder="Описание (опционально)" 
+                          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 mb-4 h-20"></textarea>
+                <div class="flex gap-2 justify-end">
+                    <button onclick="closeCreateWordListModal()" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-white">Отмена</button>
+                    <button onclick="saveNewWordList()" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded text-white">Создать</button>
+                </div>
+                <p id="word-list-create-error" class="text-red-400 text-sm mt-3 hidden"></p>
+            </div>
+        </div>
+    `;
+    
+    const existing = document.getElementById('modal-create-word-list');
+    if (existing) existing.remove();
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    // Backdrop clicks should not close the modal; close only via explicit controls
+}
+
+function closeCreateWordListModal() {
+    document.getElementById('modal-create-word-list')?.remove();
+}
+
+function saveNewWordList() {
+    const name = document.getElementById('word-list-name').value.trim();
+    const description = document.getElementById('word-list-description').value.trim();
+    
+    if (!name) {
+        document.getElementById('word-list-create-error').textContent = 'Название не может быть пустым';
+        document.getElementById('word-list-create-error').classList.remove('hidden');
+        return;
+    }
+    
+    fetch('{{ route("word-lists.store") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ name, description })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            closeCreateWordListModal();
+            loadWordLists();
+        } else {
+            document.getElementById('word-list-create-error').textContent = data.message || 'Ошибка создания';
+            document.getElementById('word-list-create-error').classList.remove('hidden');
+        }
+    })
+    .catch(err => {
+        document.getElementById('word-list-create-error').textContent = 'Ошибка сети';
+        document.getElementById('word-list-create-error').classList.remove('hidden');
+        console.error(err);
+    });
+}
+
+function openEditWordListModal(listId) {
+    fetch('{{ route("word-lists.index") }}', {
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        const currentList = data.lists.find(l => l.id === listId);
+        if (!currentList) {
+            alert('Список не найден');
+            return;
+        }
+        
+        displayEditWordListModal(listId, currentList);
+    })
+    .catch(err => {
+        alert('Ошибка загрузки данных списка');
+        console.error(err);
+    });
+}
+
+function displayEditWordListModal(listId, currentList) {
+    const modalHtml = `
+        <div id="modal-edit-word-list-${listId}" style="position: fixed; inset: 0; display: flex; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.5); z-index: 50; overflow-y: auto;" class="modal-backdrop">
+            <div style="background: #2d3748; border-radius: 12px; padding: 2rem; width: 90%; max-width: 700px; border: 1px solid #4b5563; margin: 2rem auto;" class="modal-content">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h2 class="text-2xl font-bold text-purple-400">Редактировать список слов</h2>
+                    <button onclick="closeEditWordListModal(${listId})" style="background: none; border: none; color: #9ca3af; font-size: 1.5rem; cursor: pointer;">×</button>
+                </div>
+                
+                <div style="max-height: 600px; overflow-y: auto;">
+                    <div style="margin-bottom: 1.5rem;">
+                        <label class="text-white text-sm block mb-2">Название списка</label>
+                        <input type="text" id="edit-word-list-name-${listId}" placeholder="Название списка" 
+                               value="${escapeWordHtml(currentList.name)}"
+                               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 mb-3">
+                        
+                        <label class="text-white text-sm block mb-2">Описание</label>
+                        <textarea id="edit-word-list-description-${listId}" placeholder="Описание (опционально)" 
+                                  class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 h-20">${escapeWordHtml(currentList.description || '')}</textarea>
+                    </div>
+                    
+                    <div style="margin-bottom: 1.5rem; background: #1f2937; border-left: 4px solid #8b5cf6; padding: 1rem; border-radius: 6px;">
+                        <label class="text-white text-sm block mb-2">🔎 Найти и добавить слово</label>
+                        <p class="text-gray-400 text-xs mb-2">Поиск по слову, чтению или переводу. Выберите слово из подсказок.</p>
+                        <input id="word-search-input-${listId}" type="text" placeholder="Поиск слова..." 
+                               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 mb-2">
+                        <div id="word-search-suggestions-${listId}" class="bg-gray-800/30 rounded-lg p-2 border border-gray-600" style="max-height: 200px; overflow-y: auto;"></div>
+                    </div>
+                    
+                    <div style="margin-bottom: 1.5rem;">
+                        <label class="text-white text-sm block mb-2">✏️ Слова в списке (${currentList.word_count})</label>
+                        <div id="current-words-${listId}" class="bg-gray-700/50 rounded-lg p-4 border border-gray-600" style="min-height: 100px;">
+                            ${renderCurrentWords(listId, currentList)}
+                        </div>
+                    </div>
+                </div>
+                
+                <p id="word-list-edit-error-${listId}" class="text-red-400 text-sm mb-3 hidden"></p>
+                
+                <div class="flex gap-2 justify-end">
+                    <button onclick="closeEditWordListModal(${listId})" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-white font-medium transition">Отмена</button>
+                    <button onclick="saveEditedWordList(${listId})" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded text-white font-medium transition">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const existing = document.getElementById(`modal-edit-word-list-${listId}`);
+    if (existing) existing.remove();
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    const modal = document.getElementById(`modal-edit-word-list-${listId}`);
+    // Backdrop clicks should not close the modal; close only via explicit controls (close button)
+    
+    // Load detailed word info for existing IDs to show readable labels
+    try {
+        const ids = (currentList.word_ids_in_list || []).join(',');
+        if (ids) {
+            fetch(`/dictionary/batch?ids=${encodeURIComponent(ids)}`, { headers: { 'Accept': 'application/json' } })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.words && data.words.length) {
+                        const container = document.getElementById(`current-words-${listId}`);
+                        container.innerHTML = '';
+                        data.words.forEach(w => addWordToListEdit(listId, w.id, w.japanese_word));
+                    }
+                })
+                .catch(err => console.error('Batch load error', err));
+        }
+    } catch (e) {
+        console.error(e);
+    }
+    // Attach search input handler
+    const searchInput = document.getElementById(`word-search-input-${listId}`);
+    if (searchInput) {
+        searchInput.addEventListener('input', function(e) {
+            const q = this.value.trim();
+            const suggestionsEl = document.getElementById(`word-search-suggestions-${listId}`);
+            if (!q) { suggestionsEl.innerHTML = ''; return; }
+            searchWordsDebounced(listId, q);
+        });
+    }
+}
+
+function renderCurrentWords(listId, currentList) {
+    if (!currentList.word_ids_in_list || currentList.word_ids_in_list.length === 0) {
+        return '<p class="text-gray-400 text-sm">В списке нет слов</p>';
+    }
+    
+    const chunkSize = 10;
+    let html = '<div style="display: inline-block; width: 100%;">';
+    
+    for (let i = 0; i < currentList.word_ids_in_list.length; i += chunkSize) {
+        html += '<div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;">';
+        
+        const chunk = currentList.word_ids_in_list.slice(i, i + chunkSize);
+        chunk.forEach(wordId => {
+            html += `
+                <div style="background: #4b5563; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #6b7280; display: inline-flex; align-items: center; gap: 0.5rem;">
+                    <span style="font-size: 0.875rem;">ID: ${wordId}</span>
+                    <button type="button" onclick="removeWordFromListEdit(${listId}, ${wordId})" 
+                            style="background: #dc2626; border: none; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.875rem;">
+                        ✕
+                    </button>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+    }
+    
+    html += '</div>';
+    return html;
+}
+
+// Search words in local dictionary and show suggestions
+let _wordSearchDebounce = null;
+function searchWordsDebounced(listId, q) {
+    clearTimeout(_wordSearchDebounce);
+    _wordSearchDebounce = setTimeout(() => searchWords(listId, q), 250);
+}
+
+function searchWords(listId, q) {
+    const suggestionsEl = document.getElementById(`word-search-suggestions-${listId}`);
+    suggestionsEl.innerHTML = '<p class="text-gray-400 text-sm">Идёт поиск...</p>';
+
+    fetch(`/dictionary/search?q=${encodeURIComponent(q)}`, { headers: { 'Accept': 'application/json' } })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.words || data.words.length === 0) {
+                suggestionsEl.innerHTML = '<p class="text-gray-400 text-sm">Ничего не найдено</p>';
+                return;
+            }
+
+            let html = '';
+            data.words.forEach(w => {
+                html += `<div data-word-id="${w.id}" data-word-text="${encodeURIComponent(w.japanese_word || '')}" style="padding:0.35rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.03); cursor: pointer;" onclick="selectSuggestedWord(${listId}, this)">` +
+                        `<strong class=\"text-white\">${escapeWordHtml(w.japanese_word)}</strong> <span class=\"text-gray-400 text-sm\">${escapeWordHtml(w.reading || '')}</span> <div class=\"text-gray-300 text-xs\">${escapeWordHtml(w.translation_ru || '')}</div>` +
+                        `</div>`;
+            });
+            suggestionsEl.innerHTML = html;
+        })
+        .catch(err => {
+            console.error(err);
+            suggestionsEl.innerHTML = '<p class="text-red-400 text-sm">Ошибка поиска</p>';
+        });
+}
+
+function selectSuggestedWord(listId, el) {
+    const wordId = parseInt(el.getAttribute('data-word-id'));
+    const wordText = decodeURIComponent(el.getAttribute('data-word-text') || '');
+    fetch(`/word-lists/${listId}/toggle-word`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ word_id: wordId })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            addWordToListEdit(listId, wordId, wordText);
+            loadWordLists();
+        } else {
+            alert(data.message || 'Ошибка добавления');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Ошибка сети');
+    });
+}
+
+function addWordToListEdit(listId, wordId, displayText) {
+    const currentWordsContainer = document.getElementById(`current-words-${listId}`);
+
+    const exists = Array.from(currentWordsContainer.querySelectorAll('[data-word-id]'))
+        .some(el => parseInt(el.getAttribute('data-word-id')) === wordId);
+
+    if (exists) return;
+
+    if (currentWordsContainer.textContent.includes('В списке нет')) {
+        currentWordsContainer.innerHTML = '';
+    }
+
+    let currentRow = currentWordsContainer.querySelector('div[style*="display: flex"][style*="flex-wrap"]');
+    if (!currentRow || currentRow.querySelectorAll('div').length >= 10) {
+        currentRow = document.createElement('div');
+        currentRow.style.cssText = 'display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;';
+        currentWordsContainer.appendChild(currentRow);
+    }
+
+    const wordEl = document.createElement('div');
+    wordEl.setAttribute('data-word-id', wordId);
+    wordEl.style.cssText = 'background: #4b5563; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #6b7280; display: inline-flex; align-items: center; gap: 0.5rem;';
+    const label = displayText ? `${escapeWordHtml(displayText)} (ID: ${wordId})` : `ID: ${wordId}`;
+    wordEl.innerHTML = `
+        <span style="font-size: 0.875rem;">${label}</span>
+        <button type="button" onclick="this.parentElement.remove(); updateEditWordListUI(${listId});" 
+                style="background: #dc2626; border: none; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.875rem;">
+            ✕
+        </button>
+    `;
+
+    currentRow.appendChild(wordEl);
+    updateEditWordListUI(listId);
+}
+
+function removeWordFromListEdit(listId, wordId) {
+    const container = document.getElementById(`current-words-${listId}`);
+    // Try to remove element marked with data-word-id
+    const el = container.querySelector(`[data-word-id="${wordId}"]`);
+    if (el) {
+        el.remove();
+    } else {
+        const wordElements = container.querySelectorAll('span');
+        wordElements.forEach(el2 => {
+            const match = el2.textContent.match(/\d+/);
+            if (match && parseInt(match[0]) === wordId) {
+                el2.parentElement.remove();
+            }
+        });
+    }
+    
+    updateEditWordListUI(listId);
+}
+
+function updateEditWordListUI(listId) {
+    const container = document.getElementById(`current-words-${listId}`);
+    const wordCount = container.querySelectorAll('[data-word-id]').length || container.querySelectorAll('span').length;
+    
+    const label = Array.from(document.querySelectorAll('label')).find(l => l.textContent.includes('Слова в списке'));
+    if (label) {
+        label.textContent = `✏️ Слова в списке (${wordCount})`;
+    }
+}
+
+function closeEditWordListModal(listId) {
+    document.getElementById(`modal-edit-word-list-${listId}`)?.remove();
+}
+
+function saveEditedWordList(listId) {
+    const name = document.getElementById(`edit-word-list-name-${listId}`).value.trim();
+    const description = document.getElementById(`edit-word-list-description-${listId}`).value.trim();
+    
+    if (!name) {
+        document.getElementById(`word-list-edit-error-${listId}`).textContent = 'Название не может быть пустым';
+        document.getElementById(`word-list-edit-error-${listId}`).classList.remove('hidden');
+        return;
+    }
+    
+    const container = document.getElementById(`current-words-${listId}`);
+    const wordIds = Array.from(container.querySelectorAll('[data-word-id]'))
+        .map(el => parseInt(el.getAttribute('data-word-id')))
+        .filter(id => !isNaN(id));
+    
+    fetch(`/word-lists/${listId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ name, description })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            fetch(`/word-lists/${listId}/words`, {
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(r => r.json())
+            .then(data => {
+                const currentWords = new Set(data.words || []);
+                const newWords = new Set(wordIds);
+                
+                const toRemove = Array.from(currentWords).filter(w => !newWords.has(w));
+                const toAdd = Array.from(newWords).filter(w => !currentWords.has(w));
+                
+                let removed = 0;
+                let added = 0;
+                let errorOccurred = false;
+                
+                const removePromises = toRemove.map(wordId => 
+                    fetch(`/word-lists/${listId}/toggle-word`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ word_id: wordId })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) removed++;
+                    })
+                    .catch(err => errorOccurred = true)
+                );
+                
+                const addPromises = toAdd.map(wordId => 
+                    fetch(`/word-lists/${listId}/toggle-word`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ word_id: wordId })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) added++;
+                    })
+                    .catch(err => errorOccurred = true)
+                );
+                
+                Promise.all([...removePromises, ...addPromises]).then(() => {
+                    if (errorOccurred) {
+                        alert('Некоторые изменения не были сохранены');
+                    }
+                    closeEditWordListModal(listId);
+                    loadWordLists();
+                });
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Ошибка обновления слов');
+            });
+        } else {
+            document.getElementById(`word-list-edit-error-${listId}`).textContent = data.message || 'Ошибка сохранения';
+            document.getElementById(`word-list-edit-error-${listId}`).classList.remove('hidden');
+        }
+    })
+    .catch(err => {
+        document.getElementById(`word-list-edit-error-${listId}`).textContent = 'Ошибка сети';
+        document.getElementById(`word-list-edit-error-${listId}`).classList.remove('hidden');
+        console.error(err);
+    });
+}
+
+function deleteWordList(listId) {
+    if (!confirm('Вы уверены? Список будет удален без возможности восстановления.')) return;
+    
+    fetch(`/word-lists/${listId}`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            'Accept': 'application/json'
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            loadWordLists();
+        } else {
+            alert(data.message || 'Ошибка удаления');
+        }
+    })
+    .catch(err => {
+        alert('Ошибка сети при удалении');
+        console.error(err);
+    });
+}
+
+function escapeWordHtml(text) {
+    if (!text) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
 </script>
 @endpush
 @endsection

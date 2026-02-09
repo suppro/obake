@@ -55,13 +55,13 @@
             <div class="flex flex-col sm:flex-row gap-3 items-stretch">
                 <input id="answer-input"
                        type="text"
-                       class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                       class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-4 text-2xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
                        placeholder="Введите ответ..."
                        autocomplete="off"
                        autocapitalize="off"
                        spellcheck="false" />
                 <button id="submit-input"
-                        class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-3 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50">
+                        class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-4 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50 text-lg">
                     Проверить
                 </button>
             </div>
@@ -69,9 +69,9 @@
         </div>
 
         <div id="result-container" class="hidden text-center">
-            <div id="result-icon" class="text-6xl mb-4"></div>
-            <div id="result-text" class="text-2xl font-bold mb-4"></div>
-            <div id="result-level" class="text-gray-400 mb-6"></div>
+            <div id="result-icon" class="text-8xl mb-4"></div>
+            <div id="result-text" class="text-4xl font-bold mb-4"></div>
+            <div id="result-level" class="text-gray-400 text-lg mb-6"></div>
 
             <!-- Детали после ответа -->
             <div id="after-answer-details" class="hidden text-left max-w-2xl mx-auto mb-6">
@@ -79,7 +79,7 @@
                     <div class="flex items-center justify-between gap-3">
                         <div>
                             <div class="text-gray-400 text-sm mb-1">Чтение</div>
-                            <div class="text-white text-lg font-semibold" id="after-reading"></div>
+                            <div class="text-white text-2xl font-semibold" id="after-reading"></div>
                         </div>
                         <button id="speak-reading"
                                 class="bg-blue-700 hover:bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg transition-all">
@@ -94,7 +94,7 @@
             </div>
 
             <button id="next-button" 
-                    class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-8 py-3 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50 transform hover:scale-105">
+                    class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-8 py-4 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50 transform hover:scale-105 text-lg">
                 Следующий вопрос →
             </button>
         </div>
@@ -103,10 +103,13 @@
             <div class="text-6xl mb-4">🎉</div>
             <div class="text-3xl font-bold text-purple-400 mb-4">Квиз завершен!</div>
             <div class="text-gray-400 mb-6">Вы повторили все кандзи</div>
-            <a href="{{ route('kanji.index') }}" 
-               class="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-8 py-3 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50 transform hover:scale-105">
-                Вернуться к списку кандзи
-            </a>
+            <div id="list-finish-info" class="mb-4"></div>
+            <div id="finish-actions" class="space-x-3">
+                <a id="finish-return-list" href="{{ route('kanji.index') }}" 
+                   class="inline-block bg-gray-700 hover:bg-gray-600 text-white font-semibold px-6 py-2 rounded-lg transition-all shadow-lg">Вернуться к списку кандзи</a>
+                <a id="finish-repeat-quiz" href="#" 
+                   class="inline-block bg-purple-600 hover:bg-purple-500 text-white font-semibold px-6 py-2 rounded-lg transition-all shadow-lg">Повторить квиз списка</a>
+            </div>
         </div>
     </div>
 </div>
@@ -165,6 +168,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const totalCount = {{ $count }};
     let answered = false;
     const quizId = '{{ $quizId }}';
+    const listId = {{ $listId ? $listId : 'null' }};
     const hintContainer = document.getElementById('hint-container');
     const hintButton = document.getElementById('hint-button');
     const hintText = document.getElementById('hint-text');
@@ -190,7 +194,12 @@ document.addEventListener('DOMContentLoaded', function() {
         hintButton.textContent = '💡 Показать подсказку';
         questionImageContainer.classList.add('hidden');
         
-        fetch(`{{ route('kanji.get-question') }}?count=${totalCount}&jlpt_level={{ $jlptLevel }}&force_input_mode={{ $forceInputMode ? '1' : '0' }}&quiz_id=${encodeURIComponent(quizId)}`, {
+        let queryString = `count=${totalCount}&jlpt_level={{ $jlptLevel }}&force_input_mode={{ $forceInputMode ? '1' : '0' }}&quiz_id=${encodeURIComponent(quizId)}`;
+        if (listId) {
+            queryString += `&list_id=${listId}`;
+        }
+        
+        fetch(`{{ route('kanji.get-question') }}?${queryString}`, {
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
@@ -208,6 +217,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Если вопросов больше нет — завершаем квиз корректно
                 finishContainer.classList.remove('hidden');
                 document.getElementById('quiz-container')?.classList.add('opacity-90');
+                showListFinishOptions();
                 return;
             }
             currentQuestion = data;
@@ -269,7 +279,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Создаем кнопки с ответами
                 data.answers.forEach((answer) => {
                     const button = document.createElement('button');
-                    button.className = 'answer-button bg-gray-700 hover:bg-gray-600 border-2 border-gray-600 text-white font-semibold px-6 py-4 rounded-lg text-lg';
+                    button.className = 'answer-button bg-gray-700 hover:bg-gray-600 border-2 border-gray-600 text-white font-semibold px-8 py-5 rounded-lg text-xl';
                     button.textContent = answer;
                     button.dataset.answer = answer;
                     button.onclick = () => selectAnswer(answer);
@@ -377,6 +387,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 setTimeout(() => {
                     resultContainer.classList.add('hidden');
                     finishContainer.classList.remove('hidden');
+                    showListFinishOptions();
                 }, 2000);
             }
         })
@@ -401,6 +412,18 @@ document.addEventListener('DOMContentLoaded', function() {
     nextButton.addEventListener('click', function() {
         if (answeredCount < totalCount) {
             loadQuestion();
+        }
+    });
+    
+    // При нажатии Enter в окне результата — переход к следующему вопросу
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter') return;
+        if (!resultContainer) return;
+        if (!resultContainer.classList.contains('hidden')) {
+            if (answeredCount < totalCount) {
+                e.preventDefault();
+                nextButton.click();
+            }
         }
     });
     
@@ -443,6 +466,71 @@ document.addEventListener('DOMContentLoaded', function() {
             window.speakJapanese(text);
         }
     });
+
+    // Показываем прогресс списка и действия (повтор/вернуться) если квиз был по списку
+    function showListFinishOptions() {
+        if (!listId) return;
+        const infoEl = document.getElementById('list-finish-info');
+        const returnBtn = document.getElementById('finish-return-list');
+        const repeatBtn = document.getElementById('finish-repeat-quiz');
+        // Локальная функция экранирования, на случай если глобальная не подключена
+        function escapeWordHtmlLocal(text) {
+            if (!text) return '';
+            return String(text).replace(/[&<>\"']/g, function(m) {
+                return ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":"&#039;"})[m];
+            });
+        }
+
+        // Запрашиваем все списки и находим нужный
+        fetch('{{ route('kanji-lists.index') }}', { headers: { 'Accept': 'application/json' } })
+            .then(r => r.json())
+            .then(json => {
+                const lists = json.lists || [];
+                const list = lists.find(l => l.id === listId);
+                if (!list) return;
+
+                const percent = Math.round(Number(list.progress_percent) || 0);
+
+                infoEl.innerHTML = `
+                    <div class="mb-3">
+                        <div class="text-sm text-gray-300">Прогресс списка "${escapeWordHtmlLocal(list.name)}"</div>
+                        <div style="width:320px; height:10px; background-color: rgba(75,85,99,0.25); border-radius:9999px; overflow:hidden; margin:6px auto 0;">
+                            <div style="height:100%; width: ${percent}%; background: linear-gradient(90deg, #a855f7 0%, #6366f1 100%); border-radius:9999px;"></div>
+                        </div>
+                        <div class="text-gray-400 text-xs mt-2 text-center">${percent}% — ${list.kanji_count || 0} кандзи, ${list.completed_count || 0} завершено</div>
+                        <div class="text-gray-400 text-xs mt-2 text-center">📚 Повторений: ${list.repetitions_completed || 0}</div>
+                    </div>
+                `;
+
+                // Если список на 100%, увеличиваем счётчик повторений
+                if (percent === 100) {
+                    const completeUrl = '{{ route('kanji-lists.complete-repetition', 'ID') }}'.replace('ID', listId);
+                    fetch(completeUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                            'Accept': 'application/json',
+                        }
+                    }).catch(err => console.error('Failed to record list repetition', err));
+                }
+
+                // Возвращаем на страницу изучения списка
+                returnBtn.href = '{{ route('kanji.index') }}?tab=lists&highlight_list=' + listId;
+                // Повторить квиз по списку — просто перезагрузить квиз с list_id
+                repeatBtn.href = '{{ route('kanji.quiz') }}?list_id=' + listId + '&count=' + totalCount;
+
+                // Явно навигируем при клике (чтобы не полагаться на первоначальный href='#')
+                repeatBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const href = this.getAttribute('href');
+                    if (href && href !== '#') {
+                        window.location.href = href;
+                    }
+                });
+            })
+            .catch(err => console.error('Failed to load kanji lists', err));
+    }
 });
 </script>
 @endpush

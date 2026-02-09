@@ -57,69 +57,49 @@ class DictionaryController extends Controller
     {
         $validated = $request->validate([
             'word_id' => ['nullable', 'exists:global_dictionary,id'],
-            'japanese_word' => ['nullable', 'string'],
+            'japanese_word' => ['required', 'string', 'max:255'],
+            'reading' => ['nullable', 'string', 'max:255'],
+            'translation_ru' => ['nullable', 'string'],
+            'translation_en' => ['nullable', 'string'],
+            'word_type' => ['nullable', 'string', 'max:255'],
+            'example_jp' => ['nullable', 'string'],
+            'example_ru' => ['nullable', 'string'],
         ]);
 
         $user = Auth::user();
         $wordId = null;
-        $word = null;
-        
+
         // Если передан word_id, используем его
         if (isset($validated['word_id'])) {
             $wordId = $validated['word_id'];
             $word = GlobalDictionary::find($wordId);
-        } 
-        // Если передан japanese_word, ищем или создаем слово
-        elseif (isset($validated['japanese_word'])) {
-            $japaneseWord = trim($validated['japanese_word']);
-            
-            // Ищем слово в глобальном словаре
-            $word = GlobalDictionary::where('japanese_word', $japaneseWord)
-                ->orWhere('reading', $japaneseWord)
-                ->first();
-            
-            // Если слова нет, создаем его из внешнего API
-            if (!$word) {
-                $dictionaryService = new JapaneseDictionaryService();
-                $wordData = $dictionaryService->lookupWordCached($japaneseWord);
-                
-                if ($wordData) {
-                    // Используем слово, которое выбрал пользователь, а не то, что вернул API
-                    // API может вернуть другое слово (например, только часть фразы)
-                    $word = GlobalDictionary::create([
-                        'japanese_word' => $japaneseWord, // Используем слово пользователя
-                        'reading' => $wordData['reading'] ?? '',
-                        'translation_ru' => $wordData['translation_ru'] ?? '',
-                        'translation_en' => $wordData['translation_en'] ?? '',
-                        'word_type' => $wordData['word_type'] ?? '',
-                        'example_jp' => $wordData['example_jp'] ?? '',
-                        'example_ru' => $wordData['example_ru'] ?? '',
-                    ]);
-                } else {
-                    // Если не удалось получить из API, создаем базовую запись
-                    $word = GlobalDictionary::create([
-                        'japanese_word' => $japaneseWord,
-                        'reading' => '',
-                        'translation_ru' => '',
-                        'translation_en' => '',
-                        'word_type' => '',
-                        'example_jp' => '',
-                        'example_ru' => '',
-                    ]);
-                }
-            }
-            
-            $wordId = $word->id;
         } else {
-            return response()->json(['error' => 'Необходимо указать word_id или japanese_word'], 400);
+            // Ищем существующее по японскому слову или чтению
+            $word = GlobalDictionary::where('japanese_word', $validated['japanese_word'])
+                ->orWhere('reading', $validated['japanese_word'])
+                ->first();
+
+            if (!$word) {
+                // Создаем запись на основе полей формы (НЕ используем внешний API)
+                $word = GlobalDictionary::create([
+                    'japanese_word' => $validated['japanese_word'],
+                    'reading' => $validated['reading'] ?? '',
+                    'translation_ru' => $validated['translation_ru'] ?? '',
+                    'translation_en' => $validated['translation_en'] ?? '',
+                    'word_type' => $validated['word_type'] ?? '',
+                    'example_jp' => $validated['example_jp'] ?? '',
+                    'example_ru' => $validated['example_ru'] ?? '',
+                ]);
+            }
+            $wordId = $word->id;
         }
-        
+
         // Проверяем, что слово еще не добавлено
         $wordExists = $user->dictionary()->get()->pluck('id')->contains($wordId);
-        
+
         if (!$wordExists) {
             $user->dictionary()->attach($wordId);
-            
+
             // Автоматически добавляем слово в изучение
             WordStudyProgress::firstOrCreate(
                 [
@@ -134,17 +114,10 @@ class DictionaryController extends Controller
             );
         }
 
-        // Получаем информацию о слове для ответа, если еще не получена
-        if (!$word && $wordId) {
-            $word = GlobalDictionary::find($wordId);
-        }
-        
-        $japaneseWordResponse = $word ? $word->japanese_word : ($validated['japanese_word'] ?? null);
-        
         return response()->json([
-            'success' => true, 
+            'success' => true,
             'word_id' => $wordId,
-            'japanese_word' => $japaneseWordResponse
+            'japanese_word' => $word->japanese_word,
         ]);
     }
     
@@ -216,8 +189,8 @@ class DictionaryController extends Controller
      */
     public function getWordData($wordId)
     {
-        $user = Auth::user();
-        $word = $user->dictionary()->where('global_dictionary.id', $wordId)->firstOrFail();
+        // Возвращаем данные слова из глобального словаря (чтобы можно было просматривать/редактировать записи)
+        $word = GlobalDictionary::findOrFail($wordId);
         return response()->json([
             'id' => $word->id,
             'japanese_word' => $word->japanese_word,
@@ -228,6 +201,63 @@ class DictionaryController extends Controller
             'example_jp' => $word->example_jp ?? '',
             'example_ru' => $word->example_ru ?? '',
         ]);
+    }
+
+    /**
+     * Поиск слов в локальном словаре (ajax)
+     */
+    public function search(Request $request)
+    {
+        $q = $request->get('q', '');
+        if (!$q) {
+            return response()->json(['success' => true, 'words' => []]);
+        }
+
+        $query = GlobalDictionary::query();
+        $query->where(function ($qr) use ($q) {
+            $qr->where('japanese_word', 'like', "%{$q}%")
+               ->orWhere('reading', 'like', "%{$q}%")
+               ->orWhere('translation_ru', 'like', "%{$q}%")
+               ->orWhere('translation_en', 'like', "%{$q}%");
+        });
+
+        $words = $query->orderBy('created_at', 'desc')->limit(30)->get()->map(function ($w) {
+            return [
+                'id' => $w->id,
+                'japanese_word' => $w->japanese_word,
+                'reading' => $w->reading,
+                'translation_ru' => $w->translation_ru,
+            ];
+        });
+
+        return response()->json(['success' => true, 'words' => $words]);
+    }
+
+    /**
+     * Получить данные группы слов по id (ids=1,2,3)
+     */
+    public function batch(Request $request)
+    {
+        $idsParam = $request->get('ids', '');
+        if (!$idsParam) {
+            return response()->json(['success' => true, 'words' => []]);
+        }
+
+        $ids = array_filter(array_map('intval', explode(',', $idsParam)));
+        if (empty($ids)) {
+            return response()->json(['success' => true, 'words' => []]);
+        }
+
+        $words = GlobalDictionary::whereIn('id', $ids)->get()->map(function ($w) {
+            return [
+                'id' => $w->id,
+                'japanese_word' => $w->japanese_word,
+                'reading' => $w->reading,
+                'translation_ru' => $w->translation_ru,
+            ];
+        });
+
+        return response()->json(['success' => true, 'words' => $words]);
     }
 
     /**
@@ -245,9 +275,9 @@ class DictionaryController extends Controller
     {
         $user = Auth::user();
         
-        // Проверяем, что слово в словаре пользователя
-        $word = $user->dictionary()->where('global_dictionary.id', $wordId)->firstOrFail();
-        
+        // Обновляем запись в глобальном словаре (разрешаем правки через интерфейс)
+        $word = GlobalDictionary::findOrFail($wordId);
+
         $validated = $request->validate([
             'japanese_word' => ['required', 'string', 'max:255'],
             'reading' => ['nullable', 'string', 'max:255'],
@@ -259,8 +289,7 @@ class DictionaryController extends Controller
             'audio_file' => ['nullable', 'file', 'mimes:mp3', 'max:5120'], // Максимум 5MB
             'remove_audio' => ['nullable', 'boolean'],
         ]);
-        
-        // Обновляем слово
+        // Обновляем глобальную запись
         $word->update([
             'japanese_word' => $validated['japanese_word'],
             'reading' => $validated['reading'] ?? '',

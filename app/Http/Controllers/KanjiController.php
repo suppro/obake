@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\GlobalDictionary;
 use App\Models\Kanji;
+use App\Models\KanjiStudyList;
 use App\Models\KanjiStudyProgress;
 use App\Models\WordStudyProgress;
 use Illuminate\Http\Request;
@@ -196,10 +197,12 @@ class KanjiController extends Controller
             $wordsQuery->where('word_type', $wordTypeFilter);
         }
         $wordsCollection = $wordsQuery->get();
+
         $wordProgressMap = WordStudyProgress::where('user_id', $user->id)
             ->whereIn('word_id', $wordsCollection->pluck('id'))
             ->get()
             ->keyBy('word_id');
+
         $wordsList = $wordsCollection->map(function ($word) use ($wordProgressMap) {
             $progress = $wordProgressMap->get($word->id);
             $level = $progress ? (int) ($progress->level ?? 0) : 0;
@@ -216,8 +219,12 @@ class KanjiController extends Controller
                 'progress_percent' => $progressPercent,
                 'is_completed' => $progress ? (bool) ($progress->is_completed ?? false) : false,
                 'next_review_at' => $progress ? $progress->next_review_at : null,
+                'in_user_dictionary' => true,
             ];
-        })->values();
+        })
+        // Сортировка: от меньшего процента изучения к большему
+        ->sortBy('progress_percent')
+        ->values();
         $wordTypes = $user->dictionary()->whereNotNull('word_type')->where('word_type', '!=', '')->distinct()->pluck('word_type')->sort()->values();
 
         return view('kanji.index', compact(
@@ -246,9 +253,10 @@ class KanjiController extends Controller
         $count = max(1, min(50, $count)); // Ограничиваем от 1 до 50
         $jlptLevel = $request->get('jlpt_level', 'any'); // any, 5, 4, 3, 2, 1
         $forceInputMode = (bool) $request->get('force_input_mode', false); // Принудительный режим ввода
+        $listId = $request->get('list_id', null); // ID списка для фильтрации кандзи
         $quizId = (string) Str::uuid();
         
-        return view('kanji.quiz', compact('count', 'jlptLevel', 'forceInputMode', 'quizId'));
+        return view('kanji.quiz', compact('count', 'jlptLevel', 'forceInputMode', 'listId', 'quizId'));
     }
 
     /**
@@ -259,8 +267,9 @@ class KanjiController extends Controller
         $count = (int) $request->get('count', 10);
         $count = max(1, min(50, $count));
         $wordType = (string) $request->get('word_type', '');
+        $listId = $request->get('list_id', null);
         $quizId = (string) Str::uuid();
-        return view('kanji.word-quiz', compact('count', 'wordType', 'quizId'));
+        return view('kanji.word-quiz', compact('count', 'wordType', 'quizId', 'listId'));
     }
 
     private function getSrsIntervalsDays(): array
@@ -364,13 +373,46 @@ class KanjiController extends Controller
         $jlptLevel = $request->get('jlpt_level', 'any');
         $forceInputMode = (bool) $request->get('force_input_mode', false);
         $quizId = (string) $request->get('quiz_id', '');
+        $listId = $request->get('list_id', null);
         if ($quizId === '') {
             return response()->json(['error' => 'quiz_id обязателен'], 422);
         }
         
-        $allKanji = $this->getAllKanji($jlptLevel);
+        // Если указан список, берём кандзи только из него
+        if ($listId) {
+            $list = KanjiStudyList::where('id', $listId)
+                ->where('user_id', $user->id)
+                ->first();
+            
+            if (!$list) {
+                return response()->json(['error' => 'Список не найден или доступ запрещён'], 403);
+            }
+            
+            $listKanjis = $list->getKanjis();
+            $allKanji = Kanji::whereIn('kanji', $listKanjis)
+                ->where('is_active', true)
+                ->get()
+                ->map(function ($kanji) {
+                    return [
+                        'kanji' => $kanji->kanji,
+                        'translation' => $kanji->translation_ru,
+                        'reading' => $kanji->reading,
+                        'description' => $kanji->description,
+                        'jlpt_level' => $kanji->jlpt_level,
+                    ];
+                });
+        } else {
+            $allKanji = $this->getAllKanji($jlptLevel);
+        }
+        
+        // For answer options, always use ALL kanji (regardless of list)
+        $allKanjiForAnswers = $this->getAllKanji($jlptLevel);
+        
         if ($allKanji->isEmpty()) {
             $allKanji = collect(self::KANJI_LIST_FALLBACK);
+        }
+        if ($allKanjiForAnswers->isEmpty()) {
+            $allKanjiForAnswers = collect(self::KANJI_LIST_FALLBACK);
         }
         
         // Получаем все кандзи с прогрессом пользователя
@@ -408,8 +450,23 @@ class KanjiController extends Controller
 
         $now = now();
         $candidates = $kanjiWithLevels
-            ->reject(fn ($k) => $asked->contains($k['kanji']))
-            ->reject(fn ($k) => (bool) ($k['is_completed'] ?? false));
+            ->reject(fn ($k) => $asked->contains($k['kanji']));
+        
+        // Логика фильтрации завершённых элементов
+        if ($listId) {
+            // При квизе со списком: исключаем 100% элементы только если сам список не на 100%
+            $totalInList = $kanjiWithLevels->count();
+            $completedInList = $kanjiWithLevels->filter(fn ($k) => (bool) ($k['is_completed'] ?? false))->count();
+            $listIsFullyComplete = ($totalInList > 0 && $totalInList === $completedInList);
+            
+            // Если список НЕ полностью завершен, исключаем 100% элементы
+            if (!$listIsFullyComplete) {
+                $candidates = $candidates->reject(fn ($k) => (bool) ($k['is_completed'] ?? false));
+            }
+        } else {
+            // При обычном квизе исключаем завершённые кандзи
+            $candidates = $candidates->reject(fn ($k) => (bool) ($k['is_completed'] ?? false));
+        }
         
         // Если включен режим выбора и есть выбранные кандзи — фильтруем только по ним
         if ($useKanjiSelection && $selectedForStudy->isNotEmpty()) {
@@ -479,7 +536,7 @@ class KanjiController extends Controller
         // Если вопрос типа kanji_to_ru
         if ($questionType === 'kanji_to_ru') {
             $answers = $answerMode === 'choices'
-                ? $this->buildAnswerOptions($correctAnswer, $allKanji->pluck('translation'), 6)
+                ? $this->buildAnswerOptions($correctAnswer, $allKanjiForAnswers->pluck('translation'), 6)
                 : [];
             
             return response()->json([
@@ -499,7 +556,7 @@ class KanjiController extends Controller
         } else {
             // Если вопрос типа ru_to_kanji
             $answers = $answerMode === 'choices'
-                ? $this->buildAnswerOptions($kanjiToStudy['kanji'], $allKanji->pluck('kanji'), 6)
+                ? $this->buildAnswerOptions($kanjiToStudy['kanji'], $allKanjiForAnswers->pluck('kanji'), 6)
                 : [];
             
             return response()->json([
@@ -685,6 +742,44 @@ class KanjiController extends Controller
     }
 
     /**
+     * Получить данные о кандзи для отображения в модальном окне
+     */
+    public function getKanji(Request $request)
+    {
+        $user = Auth::user();
+        $kanjiChar = (string) $request->get('kanji', '');
+        
+        if ($kanjiChar === '') {
+            return response()->json(['error' => 'Кандзи не указано'], 422);
+        }
+        
+        $kanji = Kanji::where('kanji', $kanjiChar)->where('is_active', true)->first();
+        
+        if (!$kanji) {
+            return response()->json(['error' => 'Кандзи не найдено'], 404);
+        }
+        
+        // Получаем прогресс пользователя для этого кандзи
+        $progress = KanjiStudyProgress::where('user_id', $user->id)
+            ->where('kanji', $kanjiChar)
+            ->first();
+        
+        return response()->json([
+            'kanji' => $kanjiChar,
+            'translation' => $kanji->translation_ru,
+            'reading' => $kanji->reading,
+            'jlpt_level' => $kanji->jlpt_level,
+            'image_path' => $kanji->image_path,
+            'mnemonic' => $kanji->mnemonic,
+            'description' => $kanji->description,
+            'level' => $progress ? (int) ($progress->level ?? 0) : 0,
+            'last_reviewed_at' => $progress ? ($progress->last_reviewed_at ? $progress->last_reviewed_at->format('d.m.Y') : '') : '',
+            'next_review_at' => $progress ? ($progress->next_review_at ? $progress->next_review_at->format('d.m.Y H:i') : '') : '',
+            'is_completed' => $progress ? (bool) ($progress->is_completed ?? false) : false,
+        ]);
+    }
+
+    /**
      * Настройки страницы/логики кандзи (например, включить режим выбора кандзи для квиза)
      */
     public function updateKanjiSettings(Request $request)
@@ -717,17 +812,49 @@ class KanjiController extends Controller
             return response()->json(['error' => 'quiz_id обязателен'], 422);
         }
 
-        $wordsQuery = $user->dictionary();
+        $listId = $request->get('list_id', null);
+
+        // Load ALL words for answer options (before filtering by list)
+        $allWordsForAnswersQuery = $user->dictionary();
         if ($wordType !== '') {
-            $wordsQuery->where('word_type', $wordType);
+            $allWordsForAnswersQuery->where('word_type', $wordType);
         }
-        $allWords = $wordsQuery->get();
-        if ($allWords->isEmpty()) {
+        $allWordsForAnswers = $allWordsForAnswersQuery->get();
+
+        // Base: Get word IDs from user's dictionary
+        $wordIdsFromDictionary = $user->dictionary()
+            ->when($wordType !== '', fn($q) => $q->where('word_type', $wordType))
+            ->pluck('global_dictionary.id')
+            ->toArray();
+
+        // If list_id provided, narrow to words from that list
+        if ($listId) {
+            $list = \App\Models\WordStudyList::where('id', $listId)->where('user_id', $user->id)->first();
+            if (!$list) {
+                return response()->json(['error' => 'Список не найден или доступ запрещён'], 404);
+            }
+            $listWordIds = $list->getWords();
+            if (empty($listWordIds)) {
+                return response()->json([
+                    'error' => 'В выбранном списке нет слов',
+                    'no_more_questions' => true,
+                ], 404);
+            }
+            // Intersect: только слова которые и в словаре пользователя И в списке
+            $wordIdsToUse = array_intersect($wordIdsFromDictionary, $listWordIds);
+        } else {
+            $wordIdsToUse = $wordIdsFromDictionary;
+        }
+
+        if (empty($wordIdsToUse)) {
             return response()->json([
                 'error' => 'Нет слов для квиза. Добавьте слова в словарь или снимите фильтр по типу.',
                 'no_more_questions' => true,
             ], 404);
         }
+
+        // Get all words by their IDs
+        $allWords = \App\Models\GlobalDictionary::whereIn('id', $wordIdsToUse)->get();
 
         $userProgress = WordStudyProgress::where('user_id', $user->id)
             ->whereIn('word_id', $allWords->pluck('id'))
@@ -755,8 +882,23 @@ class KanjiController extends Controller
 
         $now = now();
         $candidates = $wordsWithLevels
-            ->reject(fn ($w) => $asked->contains($w['word_id']))
-            ->reject(fn ($w) => $w['is_completed'] ?? false);
+            ->reject(fn ($w) => $asked->contains($w['word_id']));
+        
+        // Логика фильтрации завершённых элементов
+        if ($listId) {
+            // При квизе со списком: исключаем 100% элементы только если сам список не на 100%
+            $totalInList = $wordsWithLevels->count();
+            $completedInList = $wordsWithLevels->filter(fn ($w) => $w['is_completed'] ?? false)->count();
+            $listIsFullyComplete = ($totalInList > 0 && $totalInList === $completedInList);
+            
+            // Если список НЕ полностью завершен, исключаем 100% элементы
+            if (!$listIsFullyComplete) {
+                $candidates = $candidates->reject(fn ($w) => $w['is_completed'] ?? false);
+            }
+        } else {
+            // При обычном квизе исключаем завершённые слова
+            $candidates = $candidates->reject(fn ($w) => $w['is_completed'] ?? false);
+        }
 
         $due = $candidates
             ->filter(fn ($w) => empty($w['next_review_at']) || ($w['next_review_at'] && $w['next_review_at']->lte($now)))
@@ -788,7 +930,7 @@ class KanjiController extends Controller
             ? $wordToStudy['japanese_word'] . '（' . $wordToStudy['reading'] . '）'
             : $wordToStudy['japanese_word'];
 
-        $allWordsDisplay = $allWords->map(function ($w) {
+        $allWordsDisplay = $allWordsForAnswers->map(function ($w) {
             $r = $w->reading ?? '';
             return trim($r) !== '' ? $w->japanese_word . '（' . $r . '）' : $w->japanese_word;
         });

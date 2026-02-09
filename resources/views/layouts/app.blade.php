@@ -39,7 +39,6 @@
                     <div class="flex items-center space-x-4">
                         @auth
                             <a href="{{ route('dashboard') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Главная</a>
-                            <a href="{{ route('study.index') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Изучение</a>
                             <a href="{{ route('kanji.index') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Кандзи и слова</a>
 
                             <form method="POST" action="{{ route('logout') }}" class="inline">

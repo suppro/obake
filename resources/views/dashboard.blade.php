@@ -12,9 +12,9 @@
             <p class="text-gray-400">Добавляйте и изучайте слова, проходите квиз</p>
         </a>
         
-        <a href="{{ route('study.index') }}" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition shadow-lg">
-            <h2 class="text-2xl font-bold mb-2 text-purple-400">🎯 Изучение</h2>
-            <p class="text-gray-400">Повторяйте слова и отслеживайте свой прогресс</p>
+        <a href="{{ route('kanji.index') }}" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition shadow-lg">
+            <h2 class="text-2xl font-bold mb-2 text-purple-400">🎓 Кандзи</h2>
+            <p class="text-gray-400">Изучайте кандзи, повторяйте через систему интервалов</p>
         </a>
     </div>
     

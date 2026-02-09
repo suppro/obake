@@ -41,13 +41,13 @@
             <div class="flex flex-col sm:flex-row gap-3 items-stretch">
                 <input id="answer-input"
                        type="text"
-                       class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 japanese-font"
+                       class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-4 text-2xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 japanese-font"
                        placeholder="Введите ответ..."
                        autocomplete="off"
                        autocapitalize="off"
                        spellcheck="false" />
                 <button id="submit-input"
-                        class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-3 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50">
+                        class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-4 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50 text-lg">
                     Проверить
                 </button>
             </div>
@@ -55,15 +55,15 @@
         </div>
 
         <div id="result-container" class="hidden text-center">
-            <div id="result-icon" class="text-6xl mb-4"></div>
-            <div id="result-text" class="text-2xl font-bold mb-4"></div>
-            <div id="result-level" class="text-gray-400 mb-6"></div>
+            <div id="result-icon" class="text-8xl mb-4"></div>
+            <div id="result-text" class="text-4xl font-bold mb-4"></div>
+            <div id="result-level" class="text-gray-400 text-lg mb-6"></div>
             <div id="after-answer-details" class="text-left max-w-2xl mx-auto mb-6">
                 <div class="bg-gray-800/50 rounded-lg p-4 border border-gray-700 mb-3 hidden" id="after-reading-container">
                     <div class="flex items-center justify-between gap-3">
                         <div>
                             <div class="text-gray-400 text-sm mb-1">Чтение</div>
-                            <div class="text-white text-lg font-semibold japanese-font" id="after-reading"></div>
+                            <div class="text-white text-2xl font-semibold japanese-font" id="after-reading"></div>
                         </div>
                         <button id="speak-reading" class="bg-blue-700 hover:bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg transition-all">
                             🔊 Озвучить
@@ -72,7 +72,7 @@
                 </div>
             </div>
             <button id="next-button"
-                    class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-8 py-3 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50 transform hover:scale-105">
+                    class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-8 py-4 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50 transform hover:scale-105 text-lg">
                 Следующий вопрос →
             </button>
         </div>
@@ -81,10 +81,13 @@
             <div class="text-6xl mb-4">🎉</div>
             <div class="text-3xl font-bold text-purple-400 mb-4">Квиз завершен!</div>
             <div class="text-gray-400 mb-6">Вы повторили все слова</div>
-            <a href="{{ route('kanji.index', ['tab' => 'words']) }}"
-               class="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-8 py-3 rounded-lg transition-all shadow-lg hover:shadow-purple-500/50 transform hover:scale-105">
-                Вернуться к списку слов
-            </a>
+            <div id="list-finish-info" class="mb-4"></div>
+            <div id="finish-actions" class="space-x-3">
+                <a id="finish-return-list" href="{{ route('kanji.index', ['tab' => 'words']) }}"
+                   class="inline-block bg-gray-700 hover:bg-gray-600 text-white font-semibold px-6 py-2 rounded-lg transition-all shadow-lg">Вернуться к списку слов</a>
+                <a id="finish-repeat-quiz" href="#"
+                   class="inline-block bg-purple-600 hover:bg-purple-500 text-white font-semibold px-6 py-2 rounded-lg transition-all shadow-lg">Повторить квиз списка</a>
+            </div>
         </div>
     </div>
 </div>
@@ -137,6 +140,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let answered = false;
     const quizId = '{{ $quizId }}';
     const wordTypeParam = '{{ $wordType }}';
+    const listIdParam = '{{ $listId ?? '' }}';
 
     loadQuestion();
 
@@ -151,7 +155,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (answerInput) answerInput.disabled = false;
         if (submitInputBtn) submitInputBtn.disabled = false;
 
-        const url = `{{ route('kanji.get-word-question') }}?count=${totalCount}&quiz_id=${encodeURIComponent(quizId)}${wordTypeParam ? '&word_type=' + encodeURIComponent(wordTypeParam) : ''}`;
+        const url = `{{ route('kanji.get-word-question') }}?count=${totalCount}&quiz_id=${encodeURIComponent(quizId)}${wordTypeParam ? '&word_type=' + encodeURIComponent(wordTypeParam) : ''}${listIdParam ? '&list_id=' + encodeURIComponent(listIdParam) : ''}`;
         fetch(url, {
             headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
         })
@@ -166,6 +170,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data && data.no_more_questions) {
                 finishContainer.classList.remove('hidden');
                 document.getElementById('quiz-container')?.classList.add('opacity-90');
+                showListFinishOptions();
                 return;
             }
             currentQuestion = data;
@@ -184,7 +189,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 data.answers.forEach((answer) => {
                     const button = document.createElement('button');
-                    button.className = 'answer-button bg-gray-700 hover:bg-gray-600 border-2 border-gray-600 text-white font-semibold px-6 py-4 rounded-lg text-lg japanese-font';
+                    button.className = 'answer-button bg-gray-700 hover:bg-gray-600 border-2 border-gray-600 text-white font-semibold px-8 py-5 rounded-lg text-xl japanese-font';
                     button.textContent = answer;
                     button.dataset.answer = answer;
                     button.onclick = () => selectAnswer(answer);
@@ -266,6 +271,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 setTimeout(() => {
                     resultContainer.classList.add('hidden');
                     finishContainer.classList.remove('hidden');
+                    showListFinishOptions();
                 }, 2000);
             }
         })
@@ -283,6 +289,23 @@ document.addEventListener('DOMContentLoaded', function() {
         if (answeredCount < totalCount) loadQuestion();
     });
 
+    // При нажатии Enter в окне результата — переход к следующему вопросу
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter') return;
+        if (!resultContainer) return;
+        if (!resultContainer.classList.contains('hidden')) {
+            // Если есть ещё вопросы — нажимаем next
+            if (answeredCount < totalCount) {
+                // Небольшая задержка, чтобы избежать двойного срабатывания
+                e.preventDefault();
+                nextButton.click();
+            } else {
+                // В квизе закончились вопросы — если показан экран завершения, на Enter ничего не делаем
+                // (или можно перенаправить на список слов)
+            }
+        }
+    });
+
     function submitTypedAnswer() {
         const val = (answerInput?.value || '').trim();
         if (!val) return;
@@ -297,6 +320,67 @@ document.addEventListener('DOMContentLoaded', function() {
         const text = String(afterReading?.textContent || '').trim();
         if (window.speakJapanese) window.speakJapanese(text);
     });
+
+    function showListFinishOptions() {
+        const listId = listIdParam || '';
+        if (!listId) return;
+        const infoEl = document.getElementById('list-finish-info');
+        const returnBtn = document.getElementById('finish-return-list');
+        const repeatBtn = document.getElementById('finish-repeat-quiz');
+        // Локальная функция экранирования, если глобальная не доступна
+        function escapeWordHtmlLocal(text) {
+            if (!text) return '';
+            return String(text).replace(/[&<>\"']/g, function(m) {
+                return ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":"&#039;"})[m];
+            });
+        }
+
+        fetch('{{ route('word-lists.index') }}', { headers: { 'Accept': 'application/json' } })
+            .then(r => r.json())
+            .then(json => {
+                const lists = json.lists || [];
+                const list = lists.find(l => String(l.id) === String(listId));
+                if (!list) return;
+
+                const percent = Math.round(Number(list.progress_percent) || 0);
+
+                infoEl.innerHTML = `
+                    <div class="mb-3">
+                        <div class="text-sm text-gray-300">Прогресс списка "${escapeWordHtmlLocal(list.name)}"</div>
+                        <div style="width:320px; height:10px; background-color: rgba(75,85,99,0.25); border-radius:9999px; overflow:hidden; margin:6px auto 0;">
+                            <div style="height:100%; width: ${percent}%; background: linear-gradient(90deg, #a855f7 0%, #6366f1 100%); border-radius:9999px;"></div>
+                        </div>
+                        <div class="text-gray-400 text-xs mt-2 text-center">${percent}% — ${list.word_count || 0} слов, ${list.completed_count || 0} завершено</div>
+                        <div class="text-gray-400 text-xs mt-2 text-center">📚 Повторений: ${list.repetitions_completed || 0}</div>
+                    </div>
+                `;
+
+                // Если список на 100%, увеличиваем счётчик повторений
+                if (percent === 100) {
+                    const completeUrl = '{{ route('word-lists.complete-repetition', 'ID') }}'.replace('ID', listId);
+                    fetch(completeUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                            'Accept': 'application/json',
+                        }
+                    }).catch(err => console.error('Failed to record list repetition', err));
+                }
+
+                returnBtn.href = '{{ route('kanji.index') }}?tab=words&highlight_list=' + listId;
+                repeatBtn.href = '{{ route('kanji.word-quiz') }}?list_id=' + listId + '&count=' + totalCount;
+
+                repeatBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const href = this.getAttribute('href');
+                    if (href && href !== '#') {
+                        window.location.href = href;
+                    }
+                });
+            })
+            .catch(err => console.error('Failed to load word lists', err));
+    }
 });
 </script>
 @endpush

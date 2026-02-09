@@ -96,6 +96,22 @@ class User extends Authenticatable
     }
 
     /**
+     * Списки кандзи для изучения
+     */
+    public function kanjiStudyLists()
+    {
+        return $this->hasMany(\App\Models\KanjiStudyList::class);
+    }
+
+    /**
+     * Списки слов для изучения
+     */
+    public function wordStudyLists()
+    {
+        return $this->hasMany(\App\Models\WordStudyList::class);
+    }
+
+    /**
      * Проверка, является ли пользователь администратором
      */
     public function isAdmin(): bool
