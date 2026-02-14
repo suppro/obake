@@ -30,14 +30,14 @@ class KanjiStudyListController extends Controller
                 // Получаем информацию о кандзи с прогрессом
                 $kanjiWithProgress = collect($kanjis)->map(function ($kanji) use ($progress) {
                     $p = $progress->get($kanji);
-                    $level = $p ? $p->level : 0;
+                    $level = $p ? (int) $p->level : 0;
                     $progressPercent = min(100, max(0, ($level / 10) * 100));
                     
                     return [
                         'kanji' => $kanji,
                         'level' => $level,
                         'progress_percent' => $progressPercent,
-                        'is_completed' => $p ? (bool) $p->is_completed : false,
+                        'is_completed' => $level >= 10,
                     ];
                 });
                 
@@ -47,6 +47,7 @@ class KanjiStudyListController extends Controller
                     'description' => $list->description,
                     'kanji_count' => $list->kanji_count,
                     'repetitions_completed' => $list->repetitions_completed,
+                    'multiple_choice_only' => (bool) $list->multiple_choice_only,
                     'kanji_in_list' => $kanjis,
                     'kanji_with_progress' => $kanjiWithProgress->toArray(),
                     // Aggregate progress for the whole list (average percent)
@@ -94,6 +95,7 @@ class KanjiStudyListController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
+            'multiple_choice_only' => ['nullable', 'boolean'],
         ]);
 
         // Проверяем что нет другого списка с таким названием

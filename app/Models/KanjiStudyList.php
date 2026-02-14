@@ -14,6 +14,7 @@ class KanjiStudyList extends Model
         'description',
         'kanji_count',
         'repetitions_completed',
+        'multiple_choice_only',
     ];
 
     protected $casts = [

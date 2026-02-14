@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\WordStudyList;
+use App\Models\ReadingQuizList;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
-class WordStudyListController extends Controller
+class ReadingQuizListController extends Controller
 {
     /**
      * Получить все списки пользователя
@@ -15,14 +15,14 @@ class WordStudyListController extends Controller
     {
         $user = Auth::user();
         
-        $lists = $user->wordStudyLists()
+        $lists = $user->readingQuizLists()
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($list) use ($user) {
                 $wordIds = $list->getWords();
                 
                 // Получаем прогресс для всех слов в списке
-                $progress = \App\Models\WordStudyProgress::where('user_id', $user->id)
+                $progress = \App\Models\ReadingQuizProgress::where('user_id', $user->id)
                     ->whereIn('word_id', $wordIds)
                     ->get()
                     ->keyBy('word_id');
@@ -47,7 +47,6 @@ class WordStudyListController extends Controller
                     'description' => $list->description,
                     'word_count' => $list->word_count,
                     'repetitions_completed' => $list->repetitions_completed,
-                    'multiple_choice_only' => (bool) $list->multiple_choice_only,
                     'word_ids_in_list' => $wordIds,
                     'words_with_progress' => $wordsWithProgress->toArray(),
                     // Aggregate progress for the whole list (average percent)
@@ -73,12 +72,12 @@ class WordStudyListController extends Controller
         $user = Auth::user();
         
         // Проверяем что у пользователя нет списка с таким названием
-        $exists = $user->wordStudyLists()->where('name', $validated['name'])->exists();
+        $exists = $user->readingQuizLists()->where('name', $validated['name'])->exists();
         if ($exists) {
             return response()->json(['error' => 'Список с таким названием уже существует'], 400);
         }
 
-        $list = $user->wordStudyLists()->create($validated);
+        $list = $user->readingQuizLists()->create($validated);
 
         return response()->json(['success' => true, 'list' => $list]);
     }
@@ -86,7 +85,7 @@ class WordStudyListController extends Controller
     /**
      * Обновить список
      */
-    public function update(Request $request, WordStudyList $list)
+    public function update(Request $request, ReadingQuizList $list)
     {
         if ($list->user_id !== Auth::id()) {
             return response()->json(['error' => 'Доступ запрещён'], 403);
@@ -95,12 +94,11 @@ class WordStudyListController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'multiple_choice_only' => ['nullable', 'boolean'],
         ]);
 
         // Проверяем что нет другого списка с таким названием
         $exists = Auth::user()
-            ->wordStudyLists()
+            ->readingQuizLists()
             ->where('name', $validated['name'])
             ->where('id', '!=', $list->id)
             ->exists();
@@ -117,7 +115,7 @@ class WordStudyListController extends Controller
     /**
      * Удалить список
      */
-    public function destroy(WordStudyList $list)
+    public function destroy(ReadingQuizList $list)
     {
         if ($list->user_id !== Auth::id()) {
             return response()->json(['error' => 'Доступ запрещён'], 403);
@@ -131,17 +129,26 @@ class WordStudyListController extends Controller
     /**
      * Добавить или удалить слово из списка
      */
-    public function toggleWord(Request $request, WordStudyList $list)
+    public function toggleWord(Request $request, ReadingQuizList $list)
     {
         if ($list->user_id !== Auth::id()) {
             return response()->json(['error' => 'Доступ запрещён'], 403);
         }
 
         $validated = $request->validate([
-            'word_id' => ['required', 'integer', 'exists:global_dictionary,id'],
+            'word_id' => ['required', 'integer', 'exists:reading_quiz_words,id'],
         ]);
 
         $wordId = $validated['word_id'];
+        
+        // Проверяем что это слово принадлежит пользователю
+        $word = \App\Models\ReadingQuizWord::where('id', $wordId)
+            ->where('user_id', Auth::id())
+            ->first();
+        
+        if (!$word) {
+            return response()->json(['error' => 'Слово не найдено'], 404);
+        }
 
         if ($list->hasWord($wordId)) {
             $list->removeWord($wordId);
@@ -161,7 +168,7 @@ class WordStudyListController extends Controller
     /**
      * Получить слова в списке
      */
-    public function getWords(WordStudyList $list)
+    public function getWords(ReadingQuizList $list)
     {
         if ($list->user_id !== Auth::id()) {
             return response()->json(['error' => 'Доступ запрещён'], 403);
@@ -175,7 +182,7 @@ class WordStudyListController extends Controller
     /**
      * Увеличить счётчик повтора списка (при успешном завершении квиза списка)
      */
-    public function completeRepetition(Request $request, WordStudyList $list)
+    public function completeRepetition(Request $request, ReadingQuizList $list)
     {
         if ($list->user_id !== Auth::id()) {
             return response()->json(['error' => 'Доступ запрещён'], 403);

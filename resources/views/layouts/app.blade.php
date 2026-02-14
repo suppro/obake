@@ -40,6 +40,7 @@
                         @auth
                             <a href="{{ route('dashboard') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Главная</a>
                             <a href="{{ route('kanji.index') }}" class="px-4 py-2 text-gray-300 hover:text-white transition">Кандзи и слова</a>
+                            <a href="{{ route('reading-quiz.index') }}" class="px-4 py-2 text-gray-300 hover:text-blue-400 transition">📚 Квиз чтения</a>
 
                             <form method="POST" action="{{ route('logout') }}" class="inline">
                                 @csrf

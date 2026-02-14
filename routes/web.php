@@ -8,6 +8,9 @@ use App\Http\Controllers\StudyController;
 use App\Http\Controllers\KanjiController;
 use App\Http\Controllers\KanjiStudyListController;
 use App\Http\Controllers\WordStudyListController;
+use App\Http\Controllers\ReadingQuizController;
+use App\Http\Controllers\ReadingQuizListController;
+use App\Http\Controllers\ReadingQuizWordController;
 use App\Http\Controllers\AudioController;
 use App\Http\Controllers\Admin\AdminKanjiController;
 use Illuminate\Support\Facades\Route;
@@ -82,6 +85,32 @@ Route::middleware('auth')->group(function () {
     Route::post('/word-lists/{list}/toggle-word', [WordStudyListController::class, 'toggleWord'])->name('word-lists.toggle-word');
     Route::get('/word-lists/{list}/words', [WordStudyListController::class, 'getWords'])->name('word-lists.get-words');
     Route::post('/word-lists/{list}/complete-repetition', [WordStudyListController::class, 'completeRepetition'])->name('word-lists.complete-repetition');
+    
+    // Квиз на чтение
+    Route::get('/reading-quiz', [ReadingQuizController::class, 'index'])->name('reading-quiz.index');
+    Route::get('/reading-quiz/quiz', [ReadingQuizController::class, 'quiz'])->name('reading-quiz.quiz');
+    Route::post('/reading-quiz/reset-session', [ReadingQuizController::class, 'resetSession'])->name('reading-quiz.reset-session');
+    Route::get('/reading-quiz/get-question', [ReadingQuizController::class, 'getQuestion'])->name('reading-quiz.get-question');
+    Route::post('/reading-quiz/submit-answer', [ReadingQuizController::class, 'submitAnswer'])->name('reading-quiz.submit-answer');
+    Route::post('/reading-quiz/mark-completed', [ReadingQuizController::class, 'markAsCompleted'])->name('reading-quiz.mark-completed');
+    Route::get('/reading-quiz/progress', [ReadingQuizController::class, 'getProgress'])->name('reading-quiz.progress');
+    Route::get('/reading-quiz/available-words', [ReadingQuizController::class, 'getAvailableWords'])->name('reading-quiz.available-words');
+    
+    // Списки для квиза на чтение
+    Route::get('/reading-quiz-lists', [ReadingQuizListController::class, 'index'])->name('reading-quiz-lists.index');
+    Route::post('/reading-quiz-lists', [ReadingQuizListController::class, 'store'])->name('reading-quiz-lists.store');
+    Route::put('/reading-quiz-lists/{list}', [ReadingQuizListController::class, 'update'])->name('reading-quiz-lists.update');
+    Route::delete('/reading-quiz-lists/{list}', [ReadingQuizListController::class, 'destroy'])->name('reading-quiz-lists.destroy');
+    Route::post('/reading-quiz-lists/{list}/toggle-word', [ReadingQuizListController::class, 'toggleWord'])->name('reading-quiz-lists.toggle-word');
+    Route::get('/reading-quiz-lists/{list}/words', [ReadingQuizListController::class, 'getWords'])->name('reading-quiz-lists.get-words');
+    Route::post('/reading-quiz-lists/{list}/complete-repetition', [ReadingQuizListController::class, 'completeRepetition'])->name('reading-quiz-lists.complete-repetition');
+    
+    // Слова для квиза на чтение
+    Route::get('/reading-quiz-words', [ReadingQuizWordController::class, 'index'])->name('reading-quiz-words.index');
+    Route::post('/reading-quiz-words', [ReadingQuizWordController::class, 'store'])->name('reading-quiz-words.store');
+    Route::put('/reading-quiz-words/{word}', [ReadingQuizWordController::class, 'update'])->name('reading-quiz-words.update');
+    Route::delete('/reading-quiz-words/{word}', [ReadingQuizWordController::class, 'destroy'])->name('reading-quiz-words.destroy');
+    Route::post('/reading-quiz-words/import-csv', [ReadingQuizWordController::class, 'importCsv'])->name('reading-quiz-words.import-csv');
     
     // Админские маршруты для кандзи
     Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {

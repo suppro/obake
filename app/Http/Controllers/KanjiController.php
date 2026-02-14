@@ -129,16 +129,18 @@ class KanjiController extends Controller
         })->map(function ($kanjiGroup, $level) use ($userProgress, $now) {
             return $kanjiGroup->map(function ($kanji) use ($userProgress, $now) {
                 $progress = $userProgress->get($kanji->kanji);
+                $kanjiLevel = $progress ? (int) $progress->level : 0;
+                $isCompleted = $kanjiLevel >= 10;
                 return [
                     'kanji' => $kanji->kanji,
                     'translation' => $kanji->translation_ru,
                     'reading' => $kanji->reading,
                     'jlpt_level' => $kanji->jlpt_level,
-                    'level' => $progress ? $progress->level : 0,
+                    'level' => $kanjiLevel,
                     'last_reviewed_at' => $progress ? $progress->last_reviewed_at : null,
                     'next_review_at' => $progress ? $progress->next_review_at : null,
-                    'is_due' => $progress ? (!$progress->is_completed && (!$progress->next_review_at || $progress->next_review_at->lte($now))) : true,
-                    'is_completed' => $progress ? ($progress->is_completed ?? false) : false,
+                    'is_due' => $progress ? (!$isCompleted && (!$progress->next_review_at || $progress->next_review_at->lte($now))) : true,
+                    'is_completed' => $isCompleted,
                     'is_selected_for_study' => $progress ? ($progress->is_selected_for_study ?? false) : false,
                     'image_path' => $kanji->image_path,
                     'mnemonic' => $kanji->mnemonic,
@@ -172,11 +174,11 @@ class KanjiController extends Controller
         $totalKanji = Kanji::where('is_active', true)->count();
         $studiedKanji = $userProgress->count();
         $completedKanji = $userProgress
-            ->filter(fn ($p) => ($p->is_completed ?? false) || (($p->level ?? 0) >= 10))
+            ->filter(fn ($p) => (($p->level ?? 0) >= 10))
             ->count();
         $dueKanji = $userProgress
             ->filter(function ($p) use ($now) {
-                return !$p->is_completed && (!$p->next_review_at || $p->next_review_at->lte($now));
+                return (($p->level ?? 0) < 10) && (!$p->next_review_at || $p->next_review_at->lte($now));
             })
             ->count();
         
@@ -435,15 +437,16 @@ class KanjiController extends Controller
         // Создаем список всех кандзи с их уровнями
         $kanjiWithLevels = $allKanji->map(function ($kanji) use ($userProgress) {
             $progress = $userProgress->get($kanji['kanji']);
+            $level = $progress ? (int) $progress->level : 0;
             return [
                 'kanji' => $kanji['kanji'],
                 'translation' => $kanji['translation'],
                 'reading' => $kanji['reading'] ?? null,
                 'description' => $kanji['description'] ?? null,
-                'level' => $progress ? $progress->level : 0,
+                'level' => $level,
                 'last_reviewed_at' => $progress ? $progress->last_reviewed_at : null,
                 'next_review_at' => $progress ? $progress->next_review_at : null,
-                'is_completed' => $progress ? (bool) $progress->is_completed : false,
+                'is_completed' => $level >= 10,
                 'is_selected_for_study' => $progress ? (bool) $progress->is_selected_for_study : false,
             ];
         });
@@ -511,7 +514,22 @@ class KanjiController extends Controller
         
         // Определяем тип вопроса (50/50)
         $questionType = rand(0, 1) === 0 ? 'kanji_to_ru' : 'ru_to_kanji';
-        $answerMode = ($forceInputMode || ((int) ($kanjiToStudy['level'] ?? 0)) >= 5) ? 'input' : 'choices';
+        
+        // Определяем режим ответа
+        // Если список установлен на "только множественный выбор", всегда используем 'choices'
+        $multipleChoiceOnly = false;
+        if ($listId) {
+            $list = KanjiStudyList::where('id', $listId)
+                ->where('user_id', $user->id)
+                ->first();
+            if ($list) {
+                $multipleChoiceOnly = (bool) $list->multiple_choice_only;
+            }
+        }
+        
+        $answerMode = $multipleChoiceOnly 
+            ? 'choices' 
+            : ($forceInputMode || ((int) ($kanjiToStudy['level'] ?? 0)) >= 5 ? 'input' : 'choices');
         
         // Генерируем варианты ответов
         $correctAnswer = $kanjiToStudy['translation'];
@@ -657,6 +675,8 @@ class KanjiController extends Controller
         $progress->next_review_at = $this->calcNextReviewAt((int) $progress->level, $isCorrect);
         if ($progress->level >= 10) {
             $progress->is_completed = true;
+        } else {
+            $progress->is_completed = false;
         }
         $progress->save();
 
@@ -924,7 +944,22 @@ class KanjiController extends Controller
         // В квизе всегда: показываем русский, выбираем/пишем японское (формат 私（わたし）)
         $questionType = 'ru_to_word';
         $userLevel = (int) ($wordToStudy['level'] ?? 0);
-        $answerMode = $userLevel >= 5 ? 'input' : 'choices';
+        
+        // Определяем режим ответа
+        // Если список установлен на "только множественный выбор", всегда используем 'choices'
+        $multipleChoiceOnly = false;
+        if ($listId) {
+            $list = \App\Models\WordStudyList::where('id', $listId)
+                ->where('user_id', $user->id)
+                ->first();
+            if ($list) {
+                $multipleChoiceOnly = (bool) $list->multiple_choice_only;
+            }
+        }
+        
+        $answerMode = $multipleChoiceOnly 
+            ? 'choices' 
+            : ($userLevel >= 5 ? 'input' : 'choices');
 
         $displayForm = trim($wordToStudy['reading'] ?? '') !== ''
             ? $wordToStudy['japanese_word'] . '（' . $wordToStudy['reading'] . '）'

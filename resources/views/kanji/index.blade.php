@@ -183,7 +183,10 @@
                                 <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
                                     <div class="flex items-center justify-between mb-4">
                                         <div>
-                                            <h4 class="font-semibold text-white text-lg">${list.name}</h4>
+                                            <div class="flex items-center gap-2">
+                                                <h4 class="font-semibold text-white text-lg">${list.name}</h4>
+                                                ${list.multiple_choice_only ? '<span class="bg-green-900/30 text-green-400 text-xs px-2 py-1 rounded border border-green-700/50">🎯 Только выбор</span>' : ''}
+                                            </div>
                                             <p class="text-gray-400 text-sm">${list.description || 'Без описания'}</p>
                                             <p class="text-gray-500 text-xs mt-1">${list.kanji_count} кандзи</p>
                                         </div>
@@ -340,7 +343,10 @@
                                     <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
                                         <div class="flex items-center justify-between mb-4">
                                             <div>
-                                                <h4 class="font-semibold text-white text-lg">${list.name}</h4>
+                                                <div class="flex items-center gap-2">
+                                                    <h4 class="font-semibold text-white text-lg">${list.name}</h4>
+                                                    ${list.multiple_choice_only ? '<span class="bg-green-900/30 text-green-400 text-xs px-2 py-1 rounded border border-green-700/50">🎯 Только выбор</span>' : ''}
+                                                </div>
                                                 <p class="text-gray-400 text-sm">${list.description || 'Без описания'}</p>
                                                 <p class="text-gray-500 text-xs mt-1">${list.word_count} слов</p>
                                             </div>
@@ -661,7 +667,7 @@
                     <!-- Добавить в список -->
                     <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
                         <div class="text-gray-400 text-sm mb-3">Добавить в список</div>
-                        <div id="kanji-lists-dropdown" class="space-y-2">
+                        <div id="kanji-lists-dropdown">
                             <p class="text-gray-500 text-sm">Загрузка списков...</p>
                         </div>
                     </div>
@@ -1569,6 +1575,37 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Кнопка закрытия модального окна кандзи
+    const closeModalBtn = document.getElementById('close-modal');
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', function() {
+            const modal = document.getElementById('kanji-modal');
+            if (modal) {
+                modal.style.display = 'none';
+                document.body.style.overflow = '';
+                // Выход из режима редактирования если был активен
+                @if($isAdmin ?? false)
+                if (typeof window.exitEditMode === 'function') {
+                    window.exitEditMode();
+                }
+                @endif
+            }
+        });
+    }
+    
+    // Backdrop clicks should not close the modal; close only via explicit controls (close button)
+    const modal = document.getElementById('kanji-modal');
+    if (modal) {
+        modal.addEventListener('click', function(event) {
+            // Закрываем модаль только если клик был на самом backdrop (не на содержимом)
+            if (event.target === this) {
+                // Не закрываем модаль при клике на backdrop
+                event.stopPropagation();
+            }
+        });
+    }
+
+    
     // Функция переключения выбора кандзи для изучения
     window.toggleKanjiStudySelection = function(checkbox) {
         const kanji = checkbox.getAttribute('data-kanji');
@@ -1888,7 +1925,10 @@ function loadKanjiLists() {
                 <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
                     <div class="flex items-center justify-between mb-4">
                         <div>
-                            <h4 class="font-semibold text-white text-lg">${list.name}</h4>
+                            <div class="flex items-center gap-2">
+                                <h4 class="font-semibold text-white text-lg">${list.name}</h4>
+                                ${list.multiple_choice_only ? '<span class="bg-green-900/30 text-green-400 text-xs px-2 py-1 rounded border border-green-700/50">🎯 Только выбор</span>' : ''}
+                            </div>
                             <p class="text-gray-400 text-sm">${list.description || 'Без описания'}</p>
                             <p class="text-gray-500 text-xs mt-1">${list.kanji_count} кандзи</p>
                             <div style="width:220px; height:8px; background-color: rgba(75,85,99,0.35); border-radius:9999px; overflow:hidden; margin-top:8px;">
@@ -2084,6 +2124,17 @@ function displayEditListModal(listId, currentList, allKanjis) {
                         <label class="text-white text-sm block mb-2">Описание</label>
                         <textarea id="edit-list-description-${listId}" placeholder="Описание (опционально)" 
                                   class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 h-20">${escapeHtml(currentList.description || '')}</textarea>
+                        
+                        <!-- Опция: Только множественный выбор -->
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: #374151; border-radius: 6px; border-left: 3px solid #10b981;">
+                            <label class="flex items-center cursor-pointer" style="gap: 0.75rem;">
+                                <input type="checkbox" id="edit-multiple-choice-only-${listId}" 
+                                       ${currentList.multiple_choice_only ? 'checked' : ''}
+                                       class="w-4 h-4" style="cursor: pointer;">
+                                <span class="text-white text-sm font-medium">🎯 Только множественный выбор</span>
+                            </label>
+                            <p class="text-gray-400 text-xs mt-1">Если включено, квиз всегда будет с вариантами ответов, даже для продвинутых уровней</p>
+                        </div>
                     </div>
                     
                     <!-- Вставка списка кандзи через запятую -->
@@ -2380,6 +2431,7 @@ function closeEditListModal(listId) {
 function saveEditedList(listId) {
     const name = document.getElementById(`edit-list-name-${listId}`).value.trim();
     const description = document.getElementById(`edit-list-description-${listId}`).value.trim();
+    const multipleChoiceOnly = document.getElementById(`edit-multiple-choice-only-${listId}`).checked;
     
     if (!name) {
         document.getElementById(`list-edit-error-${listId}`).textContent = 'Название не может быть пустым';
@@ -2400,7 +2452,7 @@ function saveEditedList(listId) {
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
             'Accept': 'application/json'
         },
-        body: JSON.stringify({ name, description })
+        body: JSON.stringify({ name, description, multiple_choice_only: multipleChoiceOnly })
     })
     .then(r => r.json())
     .then(data => {
@@ -2535,20 +2587,85 @@ function loadKanjiListsInModal(currentKanji) {
             return;
         }
         
-        let html = '';
+        let html = `
+            <select id="kanji-lists-select" class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                <option value="">-- Выберите список для добавления --</option>
+        `;
+        
         data.lists.forEach(list => {
             const isInList = list.kanji_in_list && list.kanji_in_list.includes(currentKanji);
-            html += `
-                <button type="button" onclick="toggleKanjiInList('${currentKanji}', ${list.id}, this)" 
-                        class="w-full text-left px-3 py-2 rounded transition ${isInList ? 'bg-purple-600/70 text-white' : 'bg-gray-600/50 text-gray-300 hover:bg-gray-600'} border border-gray-600/50">
-                    ${isInList ? '✓ ' : '○ '} ${list.name}
-                </button>
-            `;
+            const status = isInList ? ' ✓' : '';
+            html += `<option value="${list.id}" data-is-in-list="${isInList ? '1' : '0'}">${list.name}${status}</option>`;
         });
+        
+        html += `</select>`;
+        html += `<p class="text-gray-400 text-xs mt-2">Выберите список и нажмите "Добавить в список"</p>`;
+        html += `<button type="button" id="add-to-list-btn" class="mt-3 w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold px-4 py-2 rounded-lg transition">Добавить в список</button>`;
+        
         container.innerHTML = html;
+        
+        // Обработчик кнопки добавления в список
+        document.getElementById('add-to-list-btn')?.addEventListener('click', function() {
+            const select = document.getElementById('kanji-lists-select');
+            const listId = select.value;
+            
+            if (!listId) {
+                alert('Выберите список');
+                return;
+            }
+            
+            // Определяем статус кандзи в списке
+            const option = select.options[select.selectedIndex];
+            const isInList = option.getAttribute('data-is-in-list') === '1';
+            
+            toggleKanjiInListFromModal(currentKanji, listId, select, option, isInList);
+        });
     })
     .catch(err => {
         container.innerHTML = '<p class="text-red-400 text-sm">Ошибка загрузки списков</p>';
+        console.error(err);
+    });
+}
+
+// Переключение кандзи в списке из модального окна
+function toggleKanjiInListFromModal(kanji, listId, select, option, isInList) {
+    fetch(`/kanji-lists/${listId}/toggle-kanji`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ kanji })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // Обновляем атрибут и текст опции
+            const newStatus = data.added ? '1' : '0';
+            option.setAttribute('data-is-in-list', newStatus);
+            
+            // Обновляем текст опции с символом
+            const listName = option.textContent.replace(/ ✓$/, '').trim();
+            if (data.added) {
+                option.textContent = listName + ' ✓';
+                alert('Кандзи добавлен в список!');
+            } else {
+                option.textContent = listName;
+                alert('Кандзи удален из списка!');
+            }
+            
+            // Сброс select к default опции
+            select.value = '';
+            
+            // Обновляем списки на странице
+            loadKanjiLists();
+        } else {
+            alert(data.message || 'Ошибка при добавлении в список');
+        }
+    })
+    .catch(err => {
+        alert('Ошибка сети');
         console.error(err);
     });
 }
@@ -2613,7 +2730,10 @@ function loadWordLists() {
                 <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
                     <div class="flex items-center justify-between mb-4">
                         <div>
-                            <h4 class="font-semibold text-white text-lg">${escapeWordHtml(list.name)}</h4>
+                            <div class="flex items-center gap-2">
+                                <h4 class="font-semibold text-white text-lg">${escapeWordHtml(list.name)}</h4>
+                                ${list.multiple_choice_only ? '<span class="bg-green-900/30 text-green-400 text-xs px-2 py-1 rounded border border-green-700/50">🎯 Только выбор</span>' : ''}
+                            </div>
                             <p class="text-gray-400 text-sm">${escapeWordHtml(list.description || 'Без описания')}</p>
                             <p class="text-gray-500 text-xs mt-1">${list.word_count} слов</p>
                             <div style="width:220px; height:8px; background-color: rgba(75,85,99,0.35); border-radius:9999px; overflow:hidden; margin-top:8px;">
@@ -2744,6 +2864,17 @@ function displayEditWordListModal(listId, currentList) {
                         <label class="text-white text-sm block mb-2">Описание</label>
                         <textarea id="edit-word-list-description-${listId}" placeholder="Описание (опционально)" 
                                   class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 h-20">${escapeWordHtml(currentList.description || '')}</textarea>
+                        
+                        <!-- Опция: Только множественный выбор -->
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: #374151; border-radius: 6px; border-left: 3px solid #10b981;">
+                            <label class="flex items-center cursor-pointer" style="gap: 0.75rem;">
+                                <input type="checkbox" id="edit-word-multiple-choice-only-${listId}" 
+                                       ${currentList.multiple_choice_only ? 'checked' : ''}
+                                       class="w-4 h-4" style="cursor: pointer;">
+                                <span class="text-white text-sm font-medium">🎯 Только множественный выбор</span>
+                            </label>
+                            <p class="text-gray-400 text-xs mt-1">Если включено, квиз всегда будет с вариантами ответов, даже для продвинутых уровней</p>
+                        </div>
                     </div>
                     
                     <div style="margin-bottom: 1.5rem; background: #1f2937; border-left: 4px solid #8b5cf6; padding: 1rem; border-radius: 6px;">
@@ -2972,6 +3103,7 @@ function closeEditWordListModal(listId) {
 function saveEditedWordList(listId) {
     const name = document.getElementById(`edit-word-list-name-${listId}`).value.trim();
     const description = document.getElementById(`edit-word-list-description-${listId}`).value.trim();
+    const multipleChoiceOnly = document.getElementById(`edit-word-multiple-choice-only-${listId}`).checked;
     
     if (!name) {
         document.getElementById(`word-list-edit-error-${listId}`).textContent = 'Название не может быть пустым';
@@ -2991,7 +3123,7 @@ function saveEditedWordList(listId) {
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
             'Accept': 'application/json'
         },
-        body: JSON.stringify({ name, description })
+        body: JSON.stringify({ name, description, multiple_choice_only: multipleChoiceOnly })
     })
     .then(r => r.json())
     .then(data => {

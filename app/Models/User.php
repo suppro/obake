@@ -96,6 +96,30 @@ class User extends Authenticatable
     }
 
     /**
+     * Прогресс квиза на чтение слов
+     */
+    public function readingQuizProgress()
+    {
+        return $this->hasMany(\App\Models\ReadingQuizProgress::class);
+    }
+
+    /**
+     * Списки для квиза на чтение
+     */
+    public function readingQuizLists()
+    {
+        return $this->hasMany(\App\Models\ReadingQuizList::class);
+    }
+
+    /**
+     * Слова для квиза на чтение
+     */
+    public function readingQuizWords()
+    {
+        return $this->hasMany(\App\Models\ReadingQuizWord::class);
+    }
+
+    /**
      * Списки кандзи для изучения
      */
     public function kanjiStudyLists()

@@ -53,4 +53,20 @@ class GlobalDictionary extends Model
     {
         return $this->hasMany(\App\Models\WordRepetition::class, 'word_id');
     }
+
+    /**
+     * Прогресс квиза на чтение этого слова
+     */
+    public function readingQuizProgress()
+    {
+        return $this->hasMany(\App\Models\ReadingQuizProgress::class, 'word_id');
+    }
+
+    /**
+     * Списки для квиза на чтение, которые содержат это слово
+     */
+    public function readingQuizLists()
+    {
+        return $this->belongsToMany(\App\Models\ReadingQuizList::class, 'reading_quiz_list_items', 'word_id', 'list_id');
+    }
 }

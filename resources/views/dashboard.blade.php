@@ -16,6 +16,11 @@
             <h2 class="text-2xl font-bold mb-2 text-purple-400">🎓 Кандзи</h2>
             <p class="text-gray-400">Изучайте кандзи, повторяйте через систему интервалов</p>
         </a>
+        
+        <a href="{{ route('reading-quiz.index') }}" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition shadow-lg">
+            <h2 class="text-2xl font-bold mb-2 text-blue-400">📚 Квиз на чтение</h2>
+            <p class="text-gray-400">Практикуйте чтение слов с выбором ответов</p>
+        </a>
     </div>
     
     <div class="mb-8">
@@ -29,6 +34,10 @@
                 <div class="text-center">
                     <div class="text-3xl font-bold text-purple-400">{{ auth()->user()->wordStudyProgress()->where('is_completed', true)->count() }}</div>
                     <div class="text-gray-400">Слов изучено</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-3xl font-bold text-blue-400">{{ auth()->user()->readingQuizProgress()->where('is_completed', true)->count() }}</div>
+                    <div class="text-gray-400">Квиз чтения: готово</div>
                 </div>
             </div>
         </div>

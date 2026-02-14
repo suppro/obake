@@ -14,6 +14,7 @@ class WordStudyList extends Model
         'description',
         'word_count',
         'repetitions_completed',
+        'multiple_choice_only',
     ];
 
     protected $casts = [
